@@ -6,10 +6,12 @@ bind-key -t vi-copy 'v' begin-selection
 bind-key -t vi-copy 'y' copy-selection
 
 
-# make active pane looks obvious
-set -g window-style 'bg=#2e2e2e'
-set -g window-active-style 'bg=#262626'
-set -g pane-active-border-bg '#bf5705'
+# Make it obvious which pane is active right now.
+# Colors based on 'tmuxcolors-256.conf' from 'seebi/tmux-colors-solarized'.
+set -g window-style 'bg=colour236'
+set -g window-active-style 'bg=colour235'
+set -g pane-border-bg colour244
+set -g pane-active-border-bg colour166
 
 
 set -g @plugin 'seebi/tmux-colors-solarized'
