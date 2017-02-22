@@ -27,7 +27,9 @@ if "[[ \"$_TMUX_COLOR\" == light ]]" " \
 
 # panes
 set -g pane-border-bg colour244
+set -g pane-border-fg colour252
 set -g pane-active-border-bg colour166
+set -g pane-active-border-fg colour222
 
 
 # loud or quiet?
@@ -50,21 +52,21 @@ setw -g mode-bg colour238
 set -g status-interval 2
 set -g status-justify left
 set -g status-position bottom
-set -g status-left-length 40
+set -g status-left-length 50
 set -g status-right-length 40
 set -g status-attr dim
 set -g status-fg colour137
 
 if "[[ \"$_TMUX_COLOR\" != light ]]" " \
 	set -g status-bg colour234 ; \
-	set -g status-left '#[fg=colour233,bg=colour245,bold] #S #[bg=colour234] ' ; \
-	set -g status-right '#[bg=colour234] #[fg=colour233,bg=colour241,bold] %d/%m #[fg=colour233,bg=colour245,bold] %H:%M:%S ' \
+	set -g status-left '#[fg=colour233,bg=colour245,bold] #{=22:session_name} #[bg=colour241] #{=-23:pane_current_path} #[bg=colour233] ' ; \
+	set -g status-right '#[bg=colour234] #[fg=colour233,bg=colour241,bold] %d/%m #[bg=colour245] %H:%M:%S ' \
 "
 
 if "[[ \"$_TMUX_COLOR\" == light ]]" " \
 	set -g status-bg colour7 ; \
-	set -g status-left '#[fg=colour254,bg=colour241,bold] #S #[bg=colour7] ' ; \
-	set -g status-right '#[bg=colour7] #[fg=colour254,bg=colour241,bold] %d/%m #[fg=colour254,bg=colour245,bold] %H:%M:%S ' \
+	set -g status-left '#[fg=colour254,bg=colour245,bold] #{=22:session_name} #[bg=colour241] #{=-23:pane_current_path} #[bg=colour7] ' ; \
+	set -g status-right '#[bg=colour7] #[fg=colour254,bg=colour241,bold] %d/%m #[bg=colour245] %H:%M:%S ' \
 "
 
 setw -g window-status-current-fg colour1
