@@ -12,13 +12,13 @@ run '~/.tmux/plugins/tpm/tpm'
 
 
 # dark (by default)
-if "[[ \"$_TMUX_COLOR\" != light ]]" " \
+if "[[ \"$(tmux showenv _TMUX_COLORS | perl -pe 's/^[^=]+=//')\" != light ]]" " \
 	set -g @colors-solarized 'dark' ; \
 	setw -g window-style 'bg=colour236,fg=colour187' ; \
 	setw -g window-active-style 'bg=colour235' \
 "
 
-if "[[ \"$_TMUX_COLOR\" == light ]]" " \
+if "[[ \"$(tmux showenv _TMUX_COLORS | perl -pe 's/^[^=]+=//')\" == light ]]" " \
 	set -g @colors-solarized 'light' ; \
 	setw -g window-style 'bg=colour254,fg=colour235' ; \
 	setw -g window-active-style 'bg=colour15' \
@@ -57,13 +57,13 @@ set -g status-right-length 40
 set -g status-attr dim
 set -g status-fg colour137
 
-if "[[ \"$_TMUX_COLOR\" != light ]]" " \
+if "[[ \"$(tmux showenv _TMUX_COLORS | perl -pe 's/^[^=]+=//')\" != light ]]" " \
 	set -g status-bg colour234 ; \
 	set -g status-left '#[fg=colour233,bg=colour245,bold] #{=22:session_name} #[bg=colour241] #{=-23:pane_current_path} #[bg=colour233] ' ; \
 	set -g status-right '#[bg=colour234] #[fg=colour233,bg=colour241,bold] %d/%m #[bg=colour245] %H:%M:%S ' \
 "
 
-if "[[ \"$_TMUX_COLOR\" == light ]]" " \
+if "[[ \"$(tmux showenv _TMUX_COLORS | perl -pe 's/^[^=]+=//')\" == light ]]" " \
 	set -g status-bg colour7 ; \
 	set -g status-left '#[fg=colour254,bg=colour245,bold] #{=22:session_name} #[bg=colour241] #{=-23:pane_current_path} #[bg=colour7] ' ; \
 	set -g status-right '#[bg=colour7] #[fg=colour254,bg=colour241,bold] %d/%m #[bg=colour245] %H:%M:%S ' \
@@ -89,14 +89,14 @@ setw -g window-status-bell-bg colour1
 set -g message-attr bold
 set -g message-command-attr bold
 
-if "[[ \"$_TMUX_COLOR\" != light ]]" " \
+if "[[ \"$(tmux showenv _TMUX_COLORS | perl -pe 's/^[^=]+=//')\" != light ]]" " \
 	set -g message-fg colour233 ; \
 	set -g message-bg colour245 ; \
 	set -g message-command-fg colour7 ; \
 	set -g message-command-bg colour241 \
 "
 
-if "[[ \"$_TMUX_COLOR\" == light ]]" " \
+if "[[ \"$(tmux showenv _TMUX_COLORS | perl -pe 's/^[^=]+=//')\" == light ]]" " \
 	set -g message-fg colour7 ; \
 	set -g message-bg colour241 ; \
 	set -g message-command-fg colour233 ; \
