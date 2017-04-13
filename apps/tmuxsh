@@ -1,0 +1,74 @@
+#!/usr/bin/env perl
+use v5.10; use strict; use warnings; use autodie qw(:all);
+
+use Env qw(HOME TMUX);
+use Cwd qw(abs_path);
+use List::Util qw(first);
+use File::Basename qw(basename);
+use IPC::System::Simple qw(runx);
+
+use constant CMDS => qw(help cd nocd reconf colors);
+
+if (! defined($TMUX) || -z $TMUX) {
+	say STDERR 'This app cannot be used outside of tmux session';
+	exit 1;
+}
+
+sub get_usage {"Usage: @{[basename $0]} (@{[join '|', CMDS]})"}
+
+if (scalar(@ARGV) < 1) {
+	say STDERR 'This app requires an argument';
+	say STDERR get_usage;
+	exit 1;
+}
+
+my $cmd = shift;
+
+sub unknown_cmd {
+	say STDERR qq/Unknown command "$cmd"/;
+	say STDERR get_usage;
+	exit 1;
+}
+
+unknown_cmd if ! defined (first {$cmd eq $_} CMDS);
+
+sub wrong_cmd_args {
+	my $app = basename $0;
+	say STDERR qq/Incorrect arguments for `$app $cmd`: "@{[join ' ', @ARGV]}"/;
+	say STDERR "Usage: $app $cmd " . join(' ', @_);
+	exit 1;
+}
+
+if ($cmd eq 'help') {
+	say get_usage;
+
+} elsif ($cmd eq 'cd') {
+
+	wrong_cmd_args 'DIRECTORY' if scalar(@ARGV) != 1;
+	my $dir = abs_path shift;
+
+	if (! -d $dir) {
+		say STDERR qq/Cannot change directory to "$dir" becuase it doesn't exists/;
+		exit 1;
+	}
+
+	runx qw(tmux setenv _TMUX_CD), $dir;
+
+} elsif ($cmd eq 'nocd') {
+	wrong_cmd_args if scalar(@ARGV) != 0;
+	runx qw(tmux setenv _TMUX_CD), '';
+
+} elsif ($cmd eq 'reconf') {
+	runx qw(tmux source --), "$HOME/.tmux.conf";
+
+} elsif ($cmd eq 'colors') {
+
+	my $usage = '(dark|light)';
+	wrong_cmd_args $usage if scalar(@ARGV) != 1;
+	wrong_cmd_args $usage if $ARGV[0] ne 'dark' && $ARGV[0] ne 'light';
+	my $colors = shift;
+
+	runx qw(tmux setenv _TMUX_COLORS), $colors;
+	runx qw(tmux source --), "$HOME/.tmux.conf";
+
+} else {unknown_cmd}
