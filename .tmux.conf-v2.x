@@ -6,6 +6,10 @@ set -g mode-keys vi
 bind -t vi-copy 'v' begin-selection
 bind -t vi-copy 'y' copy-selection
 
+# moving windows
+bind C-Left  swapw -t -1
+bind C-Right swapw -t +1
+
 
 set -g @plugin 'seebi/tmux-colors-solarized'
 run '~/.tmux/plugins/tpm/tpm'

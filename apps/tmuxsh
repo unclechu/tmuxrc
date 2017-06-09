@@ -7,7 +7,7 @@ use List::Util qw(first);
 use File::Basename qw(basename);
 use IPC::System::Simple qw(runx);
 
-use constant CMDS => qw(help cd nocd reconf colors);
+use constant CMDS => qw(help cd nocd reconf colors four);
 
 if (! defined($TMUX) || -z $TMUX) {
 	say STDERR 'This app cannot be used outside of tmux session';
@@ -70,5 +70,21 @@ if ($cmd eq 'help') {
 
 	runx qw(tmux setenv _TMUX_COLORS), $colors;
 	runx qw(tmux source --), "$HOME/.tmux.conf";
+
+} elsif ($cmd eq 'four') {
+
+	# four panes preset
+
+	wrong_cmd_args 'SYNCHRONIZE-PANES'
+		if (scalar(@ARGV) > 1) or ((scalar(@ARGV) == 1) and ($ARGV[0] ne '1'));
+
+	my @preset = qw(
+		tmux splitw -h ; splitw -v ; selectp -t 0 ; splitw -v ; selectp -t 0
+	);
+
+	my $sync_panes = (scalar(@ARGV) == 1) ? shift : undef;
+
+	unless (defined $sync_panes) {runx @preset}
+	else {runx @preset, qw(; setw synchronize-panes)}
 
 } else {unknown_cmd}
