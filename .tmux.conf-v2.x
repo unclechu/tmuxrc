@@ -1,5 +1,6 @@
 set -g escape-time 5
 set -g mouse on
+set -g renumber-windows on
 
 
 set -g mode-keys vi
