@@ -23,9 +23,16 @@ if (scalar(@ARGV) < 1) {
 }
 
 my $cmd = shift;
+my @matches = grep {$_ =~ /^$cmd/} CMDS;
+$cmd = $matches[0] if scalar(@matches) == 1;
 
 sub unknown_cmd {
+
 	say STDERR qq/Unknown command "$cmd"/;
+
+	say STDERR qq/Prefix "$cmd" matches: /, join ', ', @matches
+		if scalar(@matches) > 0;
+
 	say STDERR get_usage;
 	exit 1;
 }
