@@ -7,7 +7,7 @@ use List::Util qw(first);
 use File::Basename qw(basename);
 use IPC::System::Simple qw(runx);
 
-use constant CMDS => qw(help cd nocd reconf colors four);
+use constant CMDS => qw(help cd nocd reconf colors four sync nosync tsync);
 
 if (! defined($TMUX) || -z $TMUX) {
 	say STDERR 'This app cannot be used outside of tmux session';
@@ -93,5 +93,14 @@ if ($cmd eq 'help') {
 
 	unless (defined $sync_panes) {runx @preset}
 	else {runx @preset, qw(; setw synchronize-panes)}
+
+} elsif ($cmd eq 'sync') {
+	runx qw(tmux setw synchronize-panes on);
+
+} elsif ($cmd eq 'nosync') {
+	runx qw(tmux setw synchronize-panes off);
+
+} elsif ($cmd eq 'tsync') { # toggle
+	runx qw(tmux setw synchronize-panes);
 
 } else {unknown_cmd}
