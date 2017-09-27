@@ -2,6 +2,10 @@ set -g escape-time 5
 set -g mouse on
 set -g renumber-windows on
 
+# Start windows and panes at 1, not 0
+set -g base-index 1
+set -g pane-base-index 1
+
 
 set -g mode-keys vi
 bind -t vi-copy 'v' begin-selection
