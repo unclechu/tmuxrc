@@ -4,17 +4,22 @@ use v5.10; use strict; use warnings; use autodie qw(:all);
 use Env qw(HOME TMUX);
 use Cwd qw(abs_path);
 use List::Util qw(first);
+use File::Spec qw(devnull);
 use File::Basename qw(basename);
-use IPC::System::Simple qw(runx);
+use IPC::System::Simple qw(runx capturex);
 
-use constant CMDS => qw(help cd nocd reconf colors sync nosync tsync 4 6);
+use constant APP => basename $0;
+use constant WUT => 'Something unexpectedly went wrong…';
+
+use constant CMD_LIST =>
+	qw(help cd nocd reconf colors sync nosync tsync 4 6 bar);
 
 if (! defined($TMUX) || -z $TMUX) {
 	say STDERR 'This app cannot be used outside of tmux session';
 	exit 1;
 }
 
-sub get_usage {"Usage: @{[basename $0]} (@{[join '|', CMDS]})"}
+sub get_usage {"Usage: @{[APP]} (@{[join '|', CMD_LIST]})"}
 
 if (scalar(@ARGV) < 1) {
 	say STDERR 'This app requires an argument';
@@ -22,61 +27,112 @@ if (scalar(@ARGV) < 1) {
 	exit 1;
 }
 
-my $cmd = shift;
-my @matches = grep {$_ =~ /^$cmd/} CMDS;
-$cmd = $matches[0] if scalar(@matches) == 1;
+sub expand_cmd_by_prefix {
+	my $partial = shift;
+	die 'no cmd' unless defined $partial;
+	my @matches = grep {$_ =~ /^$partial/} @_;
 
-sub unknown_cmd {
+	if (scalar(@matches) == 1) {
+		$matches[0]
+	} else {
+		say STDERR qq/Unknown command "$partial"/;
 
-	say STDERR qq/Unknown command "$cmd"/;
+		say STDERR qq/Prefix "$partial" matches: /, join ', ', @matches
+			if scalar(@matches) > 0;
 
-	say STDERR qq/Prefix "$cmd" matches: /, join ', ', @matches
-		if scalar(@matches) > 0;
-
-	say STDERR get_usage;
-	exit 1;
+		die 'unknown cmd'
+	}
 }
 
-unknown_cmd if ! defined (first {$cmd eq $_} CMDS);
+my $cmd = eval {expand_cmd_by_prefix shift, CMD_LIST};
+if ($@) {say STDERR get_usage; exit 1}
+my @cmd_pfx = (APP, $cmd);
 
 sub wrong_cmd_args {
-	my $app = basename $0;
-	say STDERR qq/Incorrect arguments for `$app $cmd`: "@{[join ' ', @ARGV]}"/;
-	say STDERR "Usage: $app $cmd " . join(' ', @_);
+	my @args = do {my $x = shift; @{$x}};
+	my $pfx = join ' ', @cmd_pfx;
+	say STDERR qq/Incorrect arguments for `$pfx`: "@{[join ' ', @args]}"/;
+	say STDERR "Usage: $pfx" . ((scalar(@_) > 0) ? (' ' . join ' ', @_) : '');
 	exit 1;
 }
+
+sub expand_wrong_cmd_args {
+	my $args = shift; # array by reference
+	my $is_required = shift;
+	my $partial = shift @{$args};
+	my @cmd_list = @_;
+	my $cmd = eval {expand_cmd_by_prefix $partial, @cmd_list};
+
+	if ($@) {
+		my $variants = join('|', @cmd_list);
+		my @x = @{$args};
+		unshift @x, $partial if defined $partial;
+		wrong_cmd_args \@x, $is_required ? "($variants)" : "[($variants)]";
+	}
+
+	push @cmd_pfx, $cmd;
+	$cmd
+}
+
+sub get_env {
+	my $env_var = shift;
+	open OLD_STDERR, '<&STDERR' or die;
+	open STDERR, '>', File::Spec->devnull() or die;
+	chomp(my $val = eval {capturex qw(tmux showenv --), $env_var});
+	open STDERR, '>&OLD_STDERR' or die;
+	$val
+}
+
+sub reconf {runx qw(tmux source --), "$HOME/.tmux.conf"}
 
 if ($cmd eq 'help') {
 	say get_usage;
 
 } elsif ($cmd eq 'cd') {
 
-	wrong_cmd_args 'DIRECTORY' if scalar(@ARGV) != 1;
+	wrong_cmd_args \@ARGV, 'DIRECTORY' if scalar(@ARGV) != 1;
 	my $dir = abs_path shift;
 
 	if (! -d $dir) {
-		say STDERR qq/Cannot change directory to "$dir" becuase it doesn't exists/;
+		say STDERR
+			qq/Cannot change directory to "$dir"/,
+			q/ becuase it does not exists/;
+
 		exit 1;
 	}
 
-	runx qw(tmux setenv _TMUX_CD), $dir;
+	runx qw(tmux setenv -- _TMUX_CD), $dir;
 
 } elsif ($cmd eq 'nocd') {
-	wrong_cmd_args if scalar(@ARGV) != 0;
-	runx qw(tmux setenv _TMUX_CD), '';
+	wrong_cmd_args \@ARGV if scalar(@ARGV) != 0;
+	runx qw(tmux setenv -- _TMUX_CD), '';
 
 } elsif ($cmd eq 'reconf') {
-	runx qw(tmux source --), "$HOME/.tmux.conf";
+	reconf;
 
 } elsif ($cmd eq 'colors') {
+	my $color = expand_wrong_cmd_args \@ARGV, 1, qw(dark light toggle show);
+	my $env_var = '_TMUX_COLORS';
+	my $default = 'dark';
 
-	my $usage = '(dark|light)';
-	wrong_cmd_args $usage if scalar(@ARGV) != 1;
-	wrong_cmd_args $usage if $ARGV[0] ne 'dark' && $ARGV[0] ne 'light';
-	my $colors = shift;
+	my $get_prev_val = sub {
+		my $state = get_env $env_var;
+		if ($@) {$state = $default} else {$state =~ s/^$env_var=//};
+		die WUT if $state ne 'dark' and $state ne 'light' and $state ne '';
+		$state = $default if $state eq '';
+		$state
+	};
 
-	runx qw(tmux setenv _TMUX_COLORS), $colors;
-	runx qw(tmux source --), "$HOME/.tmux.conf";
+	if ($color eq 'show') {
+		say $get_prev_val->();
+		exit 0;
+	}
+
+	$color = ($get_prev_val->() eq 'dark') ? 'light' : 'dark'
+		if $color eq 'toggle';
+
+	runx qw(tmux setenv --), $env_var, $color;
+	reconf;
 
 } elsif ($cmd eq 'sync') {
 	runx qw(tmux setw synchronize-panes on);
@@ -89,7 +145,7 @@ if ($cmd eq 'help') {
 
 } elsif (($cmd eq '4') || ($cmd eq '6')) {
 
-	wrong_cmd_args 'SYNCHRONIZE-PANES'
+	wrong_cmd_args \@ARGV, 'SYNCHRONIZE-PANES'
 		if (scalar(@ARGV) > 1) or ((scalar(@ARGV) == 1) and ($ARGV[0] ne '1'));
 
 	my @preset = ($cmd eq '4') ?
@@ -107,4 +163,56 @@ if ($cmd eq 'help') {
 	unless (defined $sync_panes) {runx @preset}
 	else {runx @preset, qw(; setw synchronize-panes)}
 
-} else {unknown_cmd}
+} elsif ($cmd eq 'bar') {
+	my $bar    = expand_wrong_cmd_args \@ARGV, 1, qw(session socket pane-path);
+	my $action = expand_wrong_cmd_args \@ARGV, 0, qw(toggle on off show);
+
+	my $env_var = do {
+		my %map = (
+			session     => '_TMUX_BAR_SESSION',
+			socket      => '_TMUX_BAR_SOCKET',
+			'pane-path' => '_TMUX_BAR_PANE_PATH',
+		);
+
+		$map{$bar}
+	} || die WUT;
+
+	my $get_prev_val = sub {
+		my $prev_val = get_env $env_var;
+
+		if ($@) {
+			$prev_val = do {
+				my %defaults = (
+					session     => '0',
+					socket      => '1',
+					'pane-path' => '1',
+				);
+
+				die WUT unless exists $defaults{$bar};
+				$defaults{$bar}
+			};
+		} else {$prev_val =~ s/^$env_var=//}
+
+		die WUT
+			if $prev_val ne '1' and $prev_val ne '0' and $prev_val ne '';
+
+		($prev_val eq '1') ? '1' : '0';
+	};
+
+	if ($action eq 'show') {
+		say $get_prev_val->();
+		exit 0;
+	}
+
+	my $to_state = sub {
+		return '1' if $action eq 'on';
+		return '0' if $action eq 'off';
+		return ($get_prev_val->() eq '1') ? '0' : '1' if $action eq 'toggle';
+		die WUT
+	}->();
+
+	say((($to_state eq '1') ? 'Showing "' : 'Hiding "').$bar.'" bar…');
+	runx qw(tmux setenv --), $env_var, $to_state;
+	reconf;
+
+} else {die WUT}

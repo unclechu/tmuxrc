@@ -20,13 +20,13 @@ set -g @plugin 'seebi/tmux-colors-solarized'
 run '~/.tmux/plugins/tpm/tpm'
 
 
-if "[[ \"$(tmux showenv _TMUX_COLORS | perl -pe 's/^[^=]+=//')\" != light ]]" " \
+if "[[ \"`tmuxsh co s`\" != light ]]" "\
 	set -g @colors-solarized 'dark' ; \
 	set -g window-style 'bg=colour236,fg=colour187' ; \
 	set -g window-active-style 'bg=colour235' \
 "
 
-if "[[ \"$(tmux showenv _TMUX_COLORS | perl -pe 's/^[^=]+=//')\" == light ]]" " \
+if "[[ \"`tmuxsh co s`\" == light ]]" "\
 	set -g @colors-solarized 'light' ; \
 	set -g window-style 'bg=colour254,fg=colour235' ; \
 	set -g window-active-style 'bg=colour15' \
@@ -60,22 +60,89 @@ set -g mode-bg colour238
 set -g status-interval 2
 set -g status-justify left
 set -g status-position bottom
-set -g status-left-length 50
 set -g status-right-length 40
 set -g status-attr none
 set -g status-fg colour137
 
-if "[[ \"$(tmux showenv _TMUX_COLORS | perl -pe 's/^[^=]+=//')\" != light ]]" " \
+
+if "[[ \"`tmuxsh co s`\" != light ]]" " \
 	set -g status-bg colour234 ; \
-	set -g status-left '#[fg=colour233,bg=colour245,bold] #{=-22:socket_path} #[bg=colour241] #{=-23:pane_current_path} #[bg=colour233] ' ; \
 	set -g status-right '#[bg=colour234] #[fg=colour233,bg=colour241,bold] %d/%m #[bg=colour245] %H:%M:%S ' \
 "
 
-if "[[ \"$(tmux showenv _TMUX_COLORS | perl -pe 's/^[^=]+=//')\" == light ]]" " \
+if "[[ \"`tmuxsh co s`\" == light ]]" " \
 	set -g status-bg colour7 ; \
-	set -g status-left '#[fg=colour254,bg=colour245,bold] #{=-22:socket_path} #[bg=colour241] #{=-23:pane_current_path} #[bg=colour7] ' ; \
 	set -g status-right '#[bg=colour7] #[fg=colour254,bg=colour241,bold] %d/%m #[bg=colour245] %H:%M:%S ' \
 "
+
+
+if "[ \"`tmuxsh co s`\" != light -a \"`tmuxsh b se s`\" == 0 -a \"`tmuxsh b so s`\" == 0 -a \"`tmuxsh b p s`\" == 0 ]" " \
+	set -g status-left-length 0 ; \
+	set -g status-left '' ; \
+"
+if "[ \"`tmuxsh co s`\" != light -a \"`tmuxsh b se s`\" == 1 -a \"`tmuxsh b so s`\" == 1 -a \"`tmuxsh b p s`\" == 1 ]" " \
+	set -g status-left-length 73 ; \
+	set -g status-left '#[fg=colour233,bg=colour245,bold] #{=-22:session_name} #[bg=colour241] #{=-22:socket_path} #[fg=colour233,bg=colour245,bold] #{=-22:pane_current_path} #[bg=colour233] ' ; \
+"
+if "[ \"`tmuxsh co s`\" != light -a \"`tmuxsh b se s`\" == 0 -a \"`tmuxsh b so s`\" == 1 -a \"`tmuxsh b p s`\" == 1 ]" " \
+	set -g status-left-length 49 ; \
+	set -g status-left '#[fg=colour233,bg=colour245,bold] #{=-22:socket_path} #[bg=colour241] #{=-22:pane_current_path} #[bg=colour233] ' ; \
+"
+if "[ \"`tmuxsh co s`\" != light -a \"`tmuxsh b se s`\" == 1 -a \"`tmuxsh b so s`\" == 0 -a \"`tmuxsh b p s`\" == 1 ]" " \
+	set -g status-left-length 49 ; \
+	set -g status-left '#[fg=colour233,bg=colour245,bold] #{=-22:session_name} #[bg=colour241] #{=-22:pane_current_path} #[bg=colour233] ' ; \
+"
+if "[ \"`tmuxsh co s`\" != light -a \"`tmuxsh b se s`\" == 1 -a \"`tmuxsh b so s`\" == 1 -a \"`tmuxsh b p s`\" == 0 ]" " \
+	set -g status-left-length 49 ; \
+	set -g status-left '#[fg=colour233,bg=colour245,bold] #{=-22:session_name} #[bg=colour241] #{=-22:socket_path} #[bg=colour233] ' ; \
+"
+if "[ \"`tmuxsh co s`\" != light -a \"`tmuxsh b se s`\" == 1 -a \"`tmuxsh b so s`\" == 0 -a \"`tmuxsh b p s`\" == 0 ]" " \
+	set -g status-left-length 25 ; \
+	set -g status-left '#[fg=colour233,bg=colour245,bold] #{=-22:session_name} #[bg=colour233] ' ; \
+"
+if "[ \"`tmuxsh co s`\" != light -a \"`tmuxsh b se s`\" == 0 -a \"`tmuxsh b so s`\" == 1 -a \"`tmuxsh b p s`\" == 0 ]" " \
+	set -g status-left-length 25 ; \
+	set -g status-left '#[fg=colour233,bg=colour245,bold] #{=-22:socket_path} #[bg=colour233] ' ; \
+"
+if "[ \"`tmuxsh co s`\" != light -a \"`tmuxsh b se s`\" == 0 -a \"`tmuxsh b so s`\" == 0 -a \"`tmuxsh b p s`\" == 1 ]" " \
+	set -g status-left-length 25 ; \
+	set -g status-left '#[fg=colour233,bg=colour245,bold] #{=-22:pane_current_path} #[bg=colour233] ' ; \
+"
+
+
+if "[ \"`tmuxsh co s`\" == light -a \"`tmuxsh b se s`\" == 0 -a \"`tmuxsh b so s`\" == 0 -a \"`tmuxsh b p s`\" == 0 ]" " \
+	set -g status-left-length 0 ; \
+	set -g status-left '' ; \
+"
+if "[ \"`tmuxsh co s`\" == light -a \"`tmuxsh b se s`\" == 1 -a \"`tmuxsh b so s`\" == 1 -a \"`tmuxsh b p s`\" == 1 ]" " \
+	set -g status-left-length 73 ; \
+	set -g status-left '#[fg=colour254,bg=colour245,bold] #{=-22:session_name} #[bg=colour241] #{=-22:socket_path} #[fg=colour254,bg=colour245,bold] #{=-22:pane_current_path} #[bg=colour7] ' ; \
+"
+if "[ \"`tmuxsh co s`\" == light -a \"`tmuxsh b se s`\" == 0 -a \"`tmuxsh b so s`\" == 1 -a \"`tmuxsh b p s`\" == 1 ]" " \
+	set -g status-left-length 49 ; \
+	set -g status-left '#[fg=colour254,bg=colour245,bold] #{=-22:socket_path} #[bg=colour241] #{=-22:pane_current_path} #[bg=colour7] ' ; \
+"
+if "[ \"`tmuxsh co s`\" == light -a \"`tmuxsh b se s`\" == 1 -a \"`tmuxsh b so s`\" == 0 -a \"`tmuxsh b p s`\" == 1 ]" " \
+	set -g status-left-length 49 ; \
+	set -g status-left '#[fg=colour254,bg=colour245,bold] #{=-22:session_name} #[bg=colour241] #{=-22:pane_current_path} #[bg=colour7] ' ; \
+"
+if "[ \"`tmuxsh co s`\" == light -a \"`tmuxsh b se s`\" == 1 -a \"`tmuxsh b so s`\" == 1 -a \"`tmuxsh b p s`\" == 0 ]" " \
+	set -g status-left-length 49 ; \
+	set -g status-left '#[fg=colour254,bg=colour245,bold] #{=-22:session_name} #[bg=colour241] #{=-22:socket_path} #[bg=colour7] ' ; \
+"
+if "[ \"`tmuxsh co s`\" == light -a \"`tmuxsh b se s`\" == 1 -a \"`tmuxsh b so s`\" == 0 -a \"`tmuxsh b p s`\" == 0 ]" " \
+	set -g status-left-length 25 ; \
+	set -g status-left '#[fg=colour254,bg=colour245,bold] #{=-22:session_name} #[bg=colour7] ' ; \
+"
+if "[ \"`tmuxsh co s`\" == light -a \"`tmuxsh b se s`\" == 0 -a \"`tmuxsh b so s`\" == 1 -a \"`tmuxsh b p s`\" == 0 ]" " \
+	set -g status-left-length 25 ; \
+	set -g status-left '#[fg=colour254,bg=colour245,bold] #{=-22:socket_path} #[bg=colour7] ' ; \
+"
+if "[ \"`tmuxsh co s`\" == light -a \"`tmuxsh b se s`\" == 0 -a \"`tmuxsh b so s`\" == 0 -a \"`tmuxsh b p s`\" == 1 ]" " \
+	set -g status-left-length 25 ; \
+	set -g status-left '#[fg=colour254,bg=colour245,bold] #{=-22:pane_current_path} #[bg=colour7] ' ; \
+"
+
 
 set -g window-status-fg colour1
 set -g window-status-bg colour235
@@ -97,14 +164,14 @@ set -g window-status-bell-bg colour1
 set -g message-attr bold
 set -g message-command-attr bold
 
-if "[[ \"$(tmux showenv _TMUX_COLORS | perl -pe 's/^[^=]+=//')\" != light ]]" " \
+if "[[ \"`tmuxsh co s`\" != light ]]" " \
 	set -g message-fg colour233 ; \
 	set -g message-bg colour245 ; \
 	set -g message-command-fg colour7 ; \
 	set -g message-command-bg colour241 \
 "
 
-if "[[ \"$(tmux showenv _TMUX_COLORS | perl -pe 's/^[^=]+=//')\" == light ]]" " \
+if "[[ \"`tmuxsh co s`\" == light ]]" " \
 	set -g message-fg colour7 ; \
 	set -g message-bg colour241 ; \
 	set -g message-command-fg colour233 ; \
