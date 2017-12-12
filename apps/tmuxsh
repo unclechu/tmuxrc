@@ -12,7 +12,7 @@ use constant APP => basename $0;
 use constant WUT => 'Something unexpectedly went wrong…';
 
 use constant CMD_LIST =>
-	qw(help cd nocd reconf colors sync nosync tsync 4 6 bar);
+	qw(help cd nocd reconf colors sync nosync tsync 4 6 bar rc);
 
 if (! defined($TMUX) || -z $TMUX) {
 	say STDERR 'This app cannot be used outside of tmux session';
@@ -61,16 +61,30 @@ sub expand_wrong_cmd_args {
 	my $is_required = shift;
 	my $partial = shift @{$args};
 	my @cmd_list = @_;
-	my $cmd = eval {expand_cmd_by_prefix $partial, @cmd_list};
+	my @log_cmd_list = @cmd_list;
+
+	if (!$is_required) {
+		my $re = qr/^\*(.+)\*$/;
+
+		unless (defined $partial) {
+			$_ = first {/$re/} @cmd_list;
+			if (defined) {s/$re/$1/; $partial = $_}
+		}
+
+		map {s/$re/$1/} @cmd_list;
+	}
+
+	my $cmd = (!$is_required && !defined $partial) ? undef :
+		eval {expand_cmd_by_prefix $partial, @cmd_list};
 
 	if ($@) {
-		my $variants = join('|', @cmd_list);
+		my $variants = join('|', @log_cmd_list);
 		my @x = @{$args};
 		unshift @x, $partial if defined $partial;
 		wrong_cmd_args \@x, $is_required ? "($variants)" : "[($variants)]";
 	}
 
-	push @cmd_pfx, $cmd;
+	push @cmd_pfx, $cmd if defined $cmd;
 	$cmd
 }
 
@@ -111,7 +125,7 @@ if ($cmd eq 'help') {
 	reconf;
 
 } elsif ($cmd eq 'colors') {
-	my $color = expand_wrong_cmd_args \@ARGV, 1, qw(dark light toggle show);
+	my $color = expand_wrong_cmd_args \@ARGV, 0, qw(dark light *toggle* show);
 	my $env_var = '_TMUX_COLORS';
 	my $default = 'dark';
 
@@ -165,7 +179,7 @@ if ($cmd eq 'help') {
 
 } elsif ($cmd eq 'bar') {
 	my $bar    = expand_wrong_cmd_args \@ARGV, 1, qw(session socket pane-path);
-	my $action = expand_wrong_cmd_args \@ARGV, 0, qw(toggle on off show);
+	my $action = expand_wrong_cmd_args \@ARGV, 0, qw(*toggle* on off show);
 
 	my $env_var = do {
 		my %map = (
@@ -214,5 +228,10 @@ if ($cmd eq 'help') {
 	say((($to_state eq '1') ? 'Showing "' : 'Hiding "').$bar.'" bar…');
 	runx qw(tmux setenv --), $env_var, $to_state;
 	reconf;
+
+} elsif ($cmd eq 'rc') {
+	# helper for generating options for '.tmux.conf'
+
+	die 'TODO';
 
 } else {die WUT}
