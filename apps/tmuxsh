@@ -116,9 +116,9 @@ my %bar_env_var_map = (
 );
 
 my %bar_state_defaults = (
-	session     => '0',
-	socket      => '1',
-	'pane-path' => '1',
+	session     => '1',
+	socket      => '0',
+	'pane-path' => '0',
 );
 
 sub get_last_bar_state {
