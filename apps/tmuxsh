@@ -90,14 +90,65 @@ sub expand_wrong_cmd_args {
 
 sub get_env {
 	my $env_var = shift;
-	open OLD_STDERR, '<&STDERR' or die;
-	open STDERR, '>', File::Spec->devnull() or die;
-	chomp(my $val = eval {capturex qw(tmux showenv --), $env_var});
-	open STDERR, '>&OLD_STDERR' or die;
-	$val
+	open OLD_STDERR, '<&STDERR';
+	open STDERR, '>', File::Spec->devnull();
+	my @get_cmd = qw(tmux showenv);
+	push @get_cmd, '--', $env_var if defined $env_var;
+	chomp(my $val = eval {capturex @get_cmd});
+	open STDERR, '>&OLD_STDERR';
+	$val =~ s/^$env_var=// if defined($env_var) && defined($val);
+
+	unless (defined $env_var) {
+		my %res = ();
+		do {$res{$1} = $2 if /^([^=]+)=(.+)$/} for split '\n', $val;
+		%res
+	} else {
+		$val
+	}
 }
 
 sub reconf {runx qw(tmux source --), "$HOME/.tmux.conf"}
+
+my %bar_env_var_map = (
+	session     => '_TMUX_BAR_SESSION',
+	socket      => '_TMUX_BAR_SOCKET',
+	'pane-path' => '_TMUX_BAR_PANE_PATH',
+);
+
+my %bar_state_defaults = (
+	session     => '0',
+	socket      => '1',
+	'pane-path' => '1',
+);
+
+sub get_last_bar_state {
+	my $bar      = shift;
+	my $prev_val = shift;
+
+	$prev_val = get_env ($bar_env_var_map{$bar} || die WUT)
+		unless defined $prev_val;
+
+	my $get_default = sub {
+		die WUT unless exists $bar_state_defaults{$bar};
+		$prev_val = $bar_state_defaults{$bar};
+	};
+
+	$get_default->() if $@;
+	die WUT if $prev_val ne '1' && $prev_val ne '0' && $prev_val ne '';
+	return $get_default->() if $prev_val eq '';
+	($prev_val eq '1') ? '1' : '0';
+}
+
+use constant COLORS_ENV_VAR => '_TMUX_COLORS';
+use constant COLORS_DEFAULT => 'dark';
+
+sub get_last_colors_state {
+	my $state = get_env COLORS_ENV_VAR;
+	$state = COLORS_DEFAULT if $@;
+	die WUT if $state ne 'dark' && $state ne 'light' && $state ne '';
+	$state = COLORS_DEFAULT if $state eq '';
+	$state
+}
 
 if ($cmd eq 'help') {
 	say get_usage;
@@ -126,26 +177,16 @@ if ($cmd eq 'help') {
 
 } elsif ($cmd eq 'colors') {
 	my $color = expand_wrong_cmd_args \@ARGV, 0, qw(dark light *toggle* show);
-	my $env_var = '_TMUX_COLORS';
-	my $default = 'dark';
-
-	my $get_prev_val = sub {
-		my $state = get_env $env_var;
-		if ($@) {$state = $default} else {$state =~ s/^$env_var=//};
-		die WUT if $state ne 'dark' and $state ne 'light' and $state ne '';
-		$state = $default if $state eq '';
-		$state
-	};
 
 	if ($color eq 'show') {
-		say $get_prev_val->();
+		say get_last_colors_state;
 		exit 0;
 	}
 
-	$color = ($get_prev_val->() eq 'dark') ? 'light' : 'dark'
+	$color = (get_last_colors_state eq 'dark') ? 'light' : 'dark'
 		if $color eq 'toggle';
 
-	runx qw(tmux setenv --), $env_var, $color;
+	runx qw(tmux setenv --), COLORS_ENV_VAR, $color;
 	reconf;
 
 } elsif ($cmd eq 'sync') {
@@ -160,7 +201,7 @@ if ($cmd eq 'help') {
 } elsif (($cmd eq '4') || ($cmd eq '6')) {
 
 	wrong_cmd_args \@ARGV, 'SYNCHRONIZE-PANES'
-		if (scalar(@ARGV) > 1) or ((scalar(@ARGV) == 1) and ($ARGV[0] ne '1'));
+		if (scalar(@ARGV) > 1) || ((scalar(@ARGV) == 1) && ($ARGV[0] ne '1'));
 
 	my @preset = ($cmd eq '4') ?
 
@@ -181,57 +222,138 @@ if ($cmd eq 'help') {
 	my $bar    = expand_wrong_cmd_args \@ARGV, 1, qw(session socket pane-path);
 	my $action = expand_wrong_cmd_args \@ARGV, 0, qw(*toggle* on off show);
 
-	my $env_var = do {
-		my %map = (
-			session     => '_TMUX_BAR_SESSION',
-			socket      => '_TMUX_BAR_SOCKET',
-			'pane-path' => '_TMUX_BAR_PANE_PATH',
-		);
-
-		$map{$bar}
-	} || die WUT;
-
-	my $get_prev_val = sub {
-		my $prev_val = get_env $env_var;
-
-		if ($@) {
-			$prev_val = do {
-				my %defaults = (
-					session     => '0',
-					socket      => '1',
-					'pane-path' => '1',
-				);
-
-				die WUT unless exists $defaults{$bar};
-				$defaults{$bar}
-			};
-		} else {$prev_val =~ s/^$env_var=//}
-
-		die WUT
-			if $prev_val ne '1' and $prev_val ne '0' and $prev_val ne '';
-
-		($prev_val eq '1') ? '1' : '0';
-	};
-
 	if ($action eq 'show') {
-		say $get_prev_val->();
+		say get_last_bar_state $bar;
 		exit 0;
 	}
 
 	my $to_state = sub {
 		return '1' if $action eq 'on';
 		return '0' if $action eq 'off';
-		return ($get_prev_val->() eq '1') ? '0' : '1' if $action eq 'toggle';
+
+		return (get_last_bar_state($bar) eq '1') ? '0' : '1'
+			if $action eq 'toggle';
+
 		die WUT
 	}->();
 
-	say((($to_state eq '1') ? 'Showing "' : 'Hiding "').$bar.'" bar…');
+	my $env_var = $bar_env_var_map{$bar} || die WUT;
+	say ((($to_state eq '1') ? "Showing '" : "Hiding '")."$bar' bar…");
 	runx qw(tmux setenv --), $env_var, $to_state;
 	reconf;
 
 } elsif ($cmd eq 'rc') {
 	# helper for generating options for '.tmux.conf'
 
-	die 'TODO';
+	my @commands = ();
+	my $is_dark = (get_last_colors_state eq 'dark') ? 1 : 0;
+
+	{
+		my $wnd = $is_dark ?
+			'bg=colour236,fg=colour187' : 'bg=colour254,fg=colour235';
+
+		my $wnd_active = $is_dark ? 'bg=colour235' : 'bg=colour15';
+
+		my @a = (qw(set -g @colors-solarized), ($is_dark ? 'dark' : 'light'));
+		my @b = (qw(set -g window-style), $wnd);
+		my @c = (qw(set -g window-active-style), $wnd_active);
+		push @commands, \@a, \@b, \@c;
+	}
+
+	{
+		my @a = (
+			qw(set -g status-bg),
+			($is_dark ? 'colour234' : 'colour7')
+		);
+
+		my $windows_line_bg = $is_dark ? 'colour234' : 'colour7';
+		my $date_time_fg    = $is_dark ? 'colour233' : 'colour254';
+
+		my @b = (
+			qw(set -g status-right),
+			"#[bg=$windows_line_bg] "
+				. "#[fg=$date_time_fg,bg=colour241,bold] %d/%m "
+				. "#[bg=colour245] %H:%M:%S "
+		);
+
+		push @commands, \@a, \@b;
+	}
+
+	sub {
+		my %tmux_env = get_env;
+
+		my $get_last = sub {
+			my $bar = shift;
+			get_last_bar_state $bar, ($tmux_env{$bar_env_var_map{$bar}} || '')
+		};
+
+		my $is_session_on = $get_last->('session');
+		my $is_socket_on  = $get_last->('socket');
+		my $is_pane_path  = $get_last->('pane-path');
+
+		my @bars = do {
+			@_ = ();
+			push @_, 'session_name'      if $is_session_on;
+			push @_, 'socket_path'       if $is_socket_on;
+			push @_, 'pane_current_path' if $is_pane_path;
+			@_
+		};
+
+		if (scalar(@bars) == 0) {
+			my @a = qw(set -g status-left-length 0);
+			my @b = (qw(set -g status-left), '');
+			push @commands, \@a, \@b;
+			return;
+		}
+
+		my $one_bar_max_len = 22;
+		my $status_left_max_len = ($one_bar_max_len + 2) * scalar(@bars) + 1;
+
+		{
+			my @x = (qw(set -g status-left-length), $status_left_max_len);
+			push @commands, \@x;
+		}
+
+		my $status = do {
+			my $l   = $one_bar_max_len;
+			my $fg  = $is_dark ? 'colour233' : 'colour254';
+			my $bgw = $is_dark ? 'colour234' : 'colour7'; # windows list bg
+			my $bg1 = 'colour245';
+			my $bg2 = 'colour241';
+
+			if (scalar(@bars) == 3) {
+				"#[fg=$fg,bg=$bg1,bold] #{=-$l:$bars[0]} "
+					. "#[bg=$bg2] #{=-$l:$bars[1]} "
+					. "#[bg=$bg1] #{=-$l:$bars[2]} "
+					. "#[bg=$bgw] "
+			} elsif (scalar(@bars) == 2) {
+				"#[fg=$fg,bg=$bg1,bold] #{=-$l:$bars[0]} "
+					. "#[bg=$bg2] #{=-$l:$bars[1]} #[bg=$bgw] "
+			} elsif (scalar(@bars) == 1) {
+				"#[fg=$fg,bg=$bg1,bold] #{=-$l:$bars[0]} #[bg=$bgw] "
+			} else {die WUT}
+		};
+
+		my @x = (qw(set -g status-left), $status);
+		push @commands, \@x;
+	}->();
+
+	{
+		my $x = $is_dark;
+		my @a = (qw(set -g message-fg),         'colour'.($x ? '233' : '7'  ));
+		my @b = (qw(set -g message-bg),         'colour'.($x ? '245' : '241'));
+		my @c = (qw(set -g message-command-fg), 'colour'.($x ? '7'   : '233'));
+		my @d = (qw(set -g message-command-bg), 'colour'.($x ? '241' : '245'));
+		push @commands, \@a, \@b, \@c, \@d;
+	}
+
+	my @commands_union = do {
+		@_ = 'tmux';
+		push @_, ';', @{$_} for @commands;
+		splice @_, 1, 1;
+		@_
+	};
+
+	runx @commands_union;
 
 } else {die WUT}
