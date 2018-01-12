@@ -205,14 +205,14 @@ if ($cmd eq 'help') {
 
 	my @preset = ($cmd eq '4') ?
 
-		qw(splitw -h ; splitw -v ; selectp -t 0 ; splitw -v) :
+		qw(splitw -h ; splitw -v ; selectp -t 1 ; splitw -v) :
 
 		qw(
 			splitw -h ; splitw -v ; splitw -v ;
-			selectp -t 0 ; splitw -v ; splitw -v
+			selectp -t 1 ; splitw -v ; splitw -v
 		);
 
-	@preset = ('tmux', @preset, qw(; selectl tiled ; selectp -t 0));
+	@preset = ('tmux', @preset, qw(; selectl tiled ; selectp -t 1));
 	my $sync_panes = (scalar(@ARGV) == 1) ? shift : undef;
 
 	unless (defined $sync_panes) {runx @preset}
