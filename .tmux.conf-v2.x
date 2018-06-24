@@ -8,8 +8,8 @@ set -g pane-base-index 1
 
 
 set -g mode-keys vi
-bind -t vi-copy 'v' begin-selection
-bind -t vi-copy 'y' copy-selection
+bind -T copy-mode-vi 'v' send -X begin-selection
+bind -T copy-mode-vi 'y' send -X copy-selection
 
 # moving windows
 bind C-Left  swapw -t -1
