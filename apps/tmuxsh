@@ -262,8 +262,8 @@ if ($cmd eq 'help') {
 
 	{
 		my @a = (
-			qw(set -g status-bg),
-			($is_dark ? 'colour234' : 'colour7')
+			qw(set -g status-style),
+			'bg=colour'.($is_dark ? 234 : 7).',fg=colour137,none'
 		);
 
 		my $windows_line_bg = $is_dark ? 'colour234' : 'colour7';
@@ -330,7 +330,8 @@ if ($cmd eq 'help') {
 				"#[fg=$fg,bg=$bg1,bold] #{=-$l:$bars[0]} "
 					. "#[bg=$bg2] #{=-$l:$bars[1]} #[bg=$bgw] "
 			} elsif (scalar(@bars) == 1) {
-				"#[fg=$fg,bg=$bg1,bold] #{=-$l:$bars[0]} #[bg=$bgw] "
+				my $bg3 = $is_dark ? $bg1 : $bg2;
+				"#[fg=$fg,bg=$bg3,bold] #{=-$l:$bars[0]} #[bg=$bgw] "
 			} else {die WUT}
 		};
 
@@ -340,11 +341,18 @@ if ($cmd eq 'help') {
 
 	{
 		my $x = $is_dark;
-		my @a = (qw(set -g message-fg),         'colour'.($x ? '233' : '7'  ));
-		my @b = (qw(set -g message-bg),         'colour'.($x ? '245' : '241'));
-		my @c = (qw(set -g message-command-fg), 'colour'.($x ? '7'   : '233'));
-		my @d = (qw(set -g message-command-bg), 'colour'.($x ? '241' : '245'));
-		push @commands, \@a, \@b, \@c, \@d;
+
+		my @a = (
+			qw(set -g message-style),
+			'bold,bg=colour'.($x ? 245 : 234).',fg=colour'.($x ? 234 : 7)
+		);
+
+		my @b = (
+			qw(set -g message-command-style),
+			'bold,bg=colour'.($x ? 234 : 245).',fg=colour'.($x ? 7 : 234)
+		);
+
+		push @commands, \@a, \@b;
 	}
 
 	my @commands_union = do {
