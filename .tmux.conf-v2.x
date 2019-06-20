@@ -45,7 +45,7 @@ set -g status-interval 2
 set -g status-justify left
 set -g status-position bottom
 set -g status-right-length 40
-set -g status-style fg=colour137,none
+set -g status-style bg=colour256,fg=colour137,none
 
 set -g window-status-style bg=colour237,fg=colour1,none
 set -g window-status-format ' #[fg=colour142]#I#[fg=colour243]:#[fg=colour250]#W#[fg=colour142]#F '
