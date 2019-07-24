@@ -155,15 +155,37 @@ if ($cmd eq 'help') {
 
 } elsif ($cmd eq 'cd') {
 
-	wrong_cmd_args \@ARGV, 'DIRECTORY' if scalar(@ARGV) != 1;
-	my $dir = abs_path shift;
+	wrong_cmd_args \@ARGV, 'DIRECTORY' if scalar(@ARGV) > 1;
+	my $arg;
+
+	if (scalar(@ARGV) == 0) {
+		say STDERR
+			q/Received no directory value, /,
+			q/interpreting this as HOME directory./;
+
+		$arg = $HOME;
+	} else {
+		$arg = shift;
+	}
+
+	if ($arg eq '') {
+		say STDERR
+			q/Received empty directory value, /,
+			q/unsetting previously set directory /,
+			q/(if it have been set earlier)./;
+
+		runx qw(tmux setenv -u -- _TMUX_CD);
+		exit 0
+	}
+
+	my $dir = abs_path $arg;
 
 	if (! -d $dir) {
 		say STDERR
 			qq/Cannot change directory to "$dir"/,
-			q/ becuase it does not exists/;
+			q/ becuase it does not exists!/;
 
-		exit 1;
+		exit 1
 	}
 
 	runx qw(tmux setenv -- _TMUX_CD), $dir;
