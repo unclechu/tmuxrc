@@ -16,9 +16,12 @@ bind C-Left  swapw -t -1
 bind C-Right swapw -t +1
 
 
+# PLUGINS:BEGIN
 set -g @plugin 'seebi/tmux-colors-solarized'
 run '~/.tmux/plugins/tpm/tpm'
-if "[ -z \"`tmuxsh rc`\" ]" ''
+# PLUGINS:END
+
+if "[ -z \"`tmuxsh rc`\" ]" '' # Apply colorscheme customizations
 
 
 # panes
@@ -55,4 +58,10 @@ set -g window-status-current-format ' #[fg=colour221]#I#[fg=colour250]:#[fg=colo
 set -g window-status-bell-style bg=colour1,fg=colour255,bold
 
 
-# vim: ft=sh :
+# fix colors in (neo)vim
+
+set-option -g default-terminal 'screen-256color'
+set-option -sa terminal-overrides ',screen-256color:RGB'
+
+
+# vim: ft=tmux :
