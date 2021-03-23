@@ -11,16 +11,22 @@ Here is an example of how it may look like in your `configuration.nix`:
 ``` nix
 { pkgs, ... }:
 let
-  tmuxConfig = import "${pkgs.fetchFromGitHub {
+  tmuxConfig = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner  = "unclechu";
     repo   = "tmuxrc";
     rev    = "0000000000000000000000000000000000000000";
     sha256 = "0000000000000000000000000000000000000000000000000000";
-  }}/nix/config.nix" { inherit pkgs; };
+  }) {};
 in
 {
-  imports = [
-    tmuxConfig.systemConfiguration
+  programs.tmux = {
+    enable = true;
+    extraConfig = tmuxConfig.config;
+  };
+
+  # This is optional. In case you need ‘tmuxsh’ script always available.
+  environment.systemPackages = [
+    tmux-config.tmuxsh
   ];
 }
 ```

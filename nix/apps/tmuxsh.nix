@@ -1,19 +1,27 @@
 let sources = import ../sources.nix; in
-{ pkgs      ? import sources.nixpkgs {}
-, utils     ? import sources.nix-utils { inherit pkgs; }
-, srcScript ? ../../apps/tmuxsh
+# This module is intended to be called with ‘nixpkgs.callPackage’
+{ callPackage
+, perl
+
+# Overridable dependencies
+, __nix-utils ? callPackage sources.nix-utils {}
+
+# Build options
+, __srcScript ? ../../apps/tmuxsh
 }:
 let
-  inherit (utils) writeCheckedExecutable wrapExecutableWithPerlDeps;
-  perl = "${pkgs.perl}/bin/perl";
+  inherit (__nix-utils)
+    writeCheckedExecutable wrapExecutableWithPerlDeps shellCheckers;
+
+  perl-exe = "${perl}/bin/perl";
 
   script = writeCheckedExecutable "tmuxsh" ''
-    ${utils.shellCheckers.fileIsExecutable perl}
+    ${shellCheckers.fileIsExecutable perl-exe}
   '' ''
-    #! ${perl}
-    ${builtins.readFile srcScript}
+    #! ${perl-exe}
+    ${builtins.readFile __srcScript}
   '';
 in
 wrapExecutableWithPerlDeps "${script}/bin/${script.name}" {
-  deps = p: [ p.IPCSystemSimple  ];
+  deps = p: [ p.IPCSystemSimple ];
 }
