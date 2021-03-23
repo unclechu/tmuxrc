@@ -1,3 +1,6 @@
+# Author: Viacheslav Lotsmanov
+# License: Public Domain https://raw.githubusercontent.com/unclechu/tmuxrc/master/LICENSE
+
 let sources = import nix/sources.nix; in
 # This module is intended to be called with ‘nixpkgs.callPackage’
 args@

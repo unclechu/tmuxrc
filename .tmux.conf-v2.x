@@ -1,3 +1,6 @@
+# Author: Viacheslav Lotsmanov
+# License: Public Domain https://raw.githubusercontent.com/unclechu/tmuxrc/master/LICENSE
+
 set -g escape-time 5
 set -g mouse on
 set -g renumber-windows on

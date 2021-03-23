@@ -1,3 +1,6 @@
+# Author: Viacheslav Lotsmanov
+# License: Public Domain https://raw.githubusercontent.com/unclechu/tmuxrc/master/LICENSE
+
 let sources = import nix/sources.nix; in
 args@
 { pkgs ? import sources.nixpkgs {}

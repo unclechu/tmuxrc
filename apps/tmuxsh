@@ -1,4 +1,6 @@
 #!/usr/bin/env perl
+# Author: Viacheslav Lotsmanov
+# License: Public Domain https://raw.githubusercontent.com/unclechu/tmuxrc/master/LICENSE
 use v5.10; use strict; use warnings; use autodie qw(:all);
 
 use Env qw(HOME TMUX);

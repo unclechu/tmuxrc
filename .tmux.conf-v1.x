@@ -1,3 +1,6 @@
+# Author: Viacheslav Lotsmanov
+# License: Public Domain https://raw.githubusercontent.com/unclechu/tmuxrc/master/LICENSE
+
 set -g mode-mouse on
 set -g mouse-resize-pane on
 set -g mouse-select-pane on
