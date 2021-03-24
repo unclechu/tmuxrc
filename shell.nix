@@ -8,21 +8,21 @@ args@
 # Forwarded arguments
 , __nix-utils ? pkgs.callPackage sources.nix-utils {}
 , __srcConfigFile ? null
-, __tmuxsh ? pkgs.callPackage nix/apps/tmuxsh.nix { inherit __nix-utils; }
 
 # Local arguments
 , with-tmux   ? true
 , with-tmuxsh ? true
 }:
 let
-  forwardedNames = [ "__nix-utils" "__srcConfigFile" "__tmuxsh" ];
+  forwardedNames = [ "__nix-utils" "__srcConfigFile" ];
   filterForwarded = pkgs.lib.filterAttrs (n: v: builtins.elem n forwardedNames);
   forwardedArgs = filterForwarded args;
 
   tmux = pkgs.callPackage ./. forwardedArgs;
+  inherit (tmux) tmuxsh;
 in
 pkgs.mkShell {
   buildInputs =
-    (if with-tmux   then [ tmux ]     else []) ++
-    (if with-tmuxsh then [ __tmuxsh ] else []);
+    (if with-tmux   then [ tmux ]   else []) ++
+    (if with-tmuxsh then [ tmuxsh ] else []);
 }

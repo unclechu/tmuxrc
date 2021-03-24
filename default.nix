@@ -3,7 +3,6 @@
 
 let sources = import nix/sources.nix; in
 # This module is intended to be called with ‘nixpkgs.callPackage’
-args@
 { callPackage
 , writeTextFile
 , lib
@@ -15,22 +14,32 @@ args@
 # Overridable dependencies
 , __nix-utils ? callPackage sources.nix-utils {}
 
-# Build options
+# ↓ Build options ↓
+
 , __srcConfigFile ? ./.tmux.conf-v2.x
-# You can set this ‘__tmuxsh’ to ‘null’ if you don’t need this script
-# but keep in mind that it’s a dependency for the tmux config itself.
-, __tmuxsh ? callPackage nix/apps/tmuxsh.nix { inherit __nix-utils; }
+
+# Make ‘tmuxsh’ available for calling it manually (inside ‘tmux’ session).
+# This is not necessary if you add ‘tmuxsh’ to ‘environment.systemPackages’ in
+# your NixOS ‘configuration.nix’ for instance. Also this is for executable
+# version only, in ‘configuration.nix’ you set just tmux config file
+# (to ‘programs.tmux.extraConfig’) and this dependency wouldn’t be provided
+# anyway if you don’t add it to ‘environment.systemPackages’.
+, with-tmuxsh ? false
 }:
 let
   inherit (__nix-utils)
     esc lines unlines writeCheckedExecutable wrapExecutable shellCheckers;
 
-  tmuxsh = "${__tmuxsh}/bin/tmuxsh";
+  # ‘tmuxsh’ for the tmux config itself, without ‘tmux-conf-file’ argument.
+  # Otherwise it would be a recursive dependency.
+  # ‘tmuxsh rc’ that tmux config is calling doesn’t depend on that argument.
+  tmuxsh = callPackage nix/apps/tmuxsh.nix {
+    inherit __nix-utils;
+    tmux-conf-file = null;
+  };
 
-  replace-tmuxsh =
-    if isNull __tmuxsh
-    then x: x
-    else builtins.replaceStrings [ "tmuxsh" ] [ tmuxsh ];
+  tmuxsh-exe = "${tmuxsh}/bin/tmuxsh";
+  replace-tmuxsh = builtins.replaceStrings [ "tmuxsh" ] [ tmuxsh-exe ];
 
   pluginsSplit =
     let
@@ -69,12 +78,6 @@ let
       dash-exe = "${dash}/bin/dash";
       find = "${findutils}/bin/find";
 
-      checkPhase = ''
-        ${shellCheckers.fileIsExecutable dash-exe}
-        ${shellCheckers.fileIsExecutable find}
-        ${if isNull __tmuxsh then "" else shellCheckers.fileIsExecutable tmuxsh}
-      '';
-
       plugins =
         builtins.map (x: handlePlugin tmuxPlugins.${x}) pluginsSplit.plugins;
 
@@ -84,7 +87,11 @@ let
         done
       '';
     in
-      writeCheckedExecutable "tmux-plugins-loader-script" checkPhase ''
+      writeCheckedExecutable "tmux-plugins-loader-script" ''
+        ${shellCheckers.fileIsExecutable dash-exe}
+        ${shellCheckers.fileIsExecutable find}
+        ${shellCheckers.fileIsExecutable tmuxsh-exe}
+      '' ''
         #! ${dash-exe}
         ${unlines plugins}
       '';
@@ -100,14 +107,27 @@ let
     text = config;
     checkPhase = ''
       set -Eeuo pipefail || exit
-      ${if isNull __tmuxsh then "" else shellCheckers.fileIsExecutable tmuxsh}
+      ${shellCheckers.fileIsExecutable tmuxsh-exe}
     '';
+  };
+
+  # ‘tmuxsh’ that is provided for the user for manual calls
+  exported-tmuxsh = callPackage nix/apps/tmuxsh.nix {
+    inherit __nix-utils;
+    tmux-conf-file = configFile;
   };
 in
 wrapExecutable "${tmux}/bin/tmux" {
-  deps = if isNull __tmuxsh then [] else [ __tmuxsh ];
+  deps = if with-tmuxsh then [ exported-tmuxsh ] else [];
   args = [ "-f" configFile ];
+  checkPhase = ''
+    ${
+      if with-tmuxsh
+      then shellCheckers.fileIsExecutable "${exported-tmuxsh}/bin/tmuxsh"
+      else ""
+    }
+  '';
 } // {
-  tmuxsh = __tmuxsh;
   inherit config configFile pluginsLoader;
+  tmuxsh = exported-tmuxsh;
 }
