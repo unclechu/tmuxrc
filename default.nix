@@ -4,9 +4,9 @@
 let sources = import nix/sources.nix; in
 # This module is intended to be called with ‘nixpkgs.callPackage’
 { callPackage
+, runCommand
 , writeTextFile
 , lib
-, dash
 , findutils
 , tmuxPlugins
 , tmux
@@ -27,8 +27,7 @@ let sources = import nix/sources.nix; in
 , with-tmuxsh ? false
 }:
 let
-  inherit (__nix-utils)
-    esc lines unlines writeCheckedExecutable wrapExecutable shellCheckers;
+  inherit (__nix-utils) esc lines unlines wrapExecutable shellCheckers;
 
   # ‘tmuxsh’ for the tmux config itself, without ‘tmux-conf-file’ argument.
   # Otherwise it would be a recursive dependency.
@@ -73,32 +72,40 @@ let
       assert result.place == "post";
       lib.filterAttrs (n: v: n != "place") result;
 
-  pluginsLoader =
+  pluginsLoadingCommandsFile =
     let
-      dash-exe = "${dash}/bin/dash";
       find = "${findutils}/bin/find";
 
-      plugins =
-        builtins.map (x: handlePlugin tmuxPlugins.${x}) pluginsSplit.plugins;
-
-      handlePlugin = p: ''
-        ${find} ${esc p} -name '*.tmux' | while read -r file; do
-          "$file" || exit
-        done
-      '';
+      plugins = builtins.concatStringsSep "\n" (
+        builtins.map (x: tmuxPlugins.${x}) pluginsSplit.plugins
+      );
     in
-      writeCheckedExecutable "tmux-plugins-loader-script" ''
-        ${shellCheckers.fileIsExecutable dash-exe}
-        ${shellCheckers.fileIsExecutable find}
-        ${shellCheckers.fileIsExecutable tmuxsh-exe}
-      '' ''
-        #! ${dash-exe}
-        ${unlines plugins}
+      runCommand "tmux-plugin-imports" {
+        inherit plugins;
+        passAsFile = [ "plugins" ];
+      } ''
+        set -Eeuo pipefail || exit
+        readarray -t PLUGINS < "$pluginsPath"
+
+        for plugin in "''${PLUGINS[@]}"; do
+          if ! [[ -d $plugin ]]; then
+            >&2 printf 'Plugin path "%s" is not a directory!\n' "$plugin"
+            exit 1
+          fi
+
+          ${esc find} "$plugin" -name '*.tmux' | while read -r file; do
+            printf "run '%s'\n" "$file" >> "$out"
+          done
+        done
       '';
 
   config = ''
     ${unlines pluginsSplit.pre}
-    run ${esc "${pluginsLoader}/bin/${pluginsLoader.name}"}
+
+    # Plugins loading {{{
+    ${builtins.readFile pluginsLoadingCommandsFile}
+    # Plugins loading }}}
+
     ${unlines pluginsSplit.post}
   '';
 
@@ -128,6 +135,6 @@ wrapExecutable "${tmux}/bin/tmux" {
     }
   '';
 } // {
-  inherit config configFile pluginsLoader;
+  inherit config configFile pluginsLoadingCommandsFile;
   tmuxsh = exported-tmuxsh;
 }
