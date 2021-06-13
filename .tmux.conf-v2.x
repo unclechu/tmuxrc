@@ -63,8 +63,8 @@ set -g window-status-bell-style bg=colour1,fg=colour255,bold
 
 # fix colors in (neo)vim
 
-set-option -g default-terminal 'screen-256color'
-set-option -sa terminal-overrides ',screen-256color:RGB'
+set-option -g default-terminal 'tmux-256color'
+set-option -sa terminal-overrides ',screen-256color:RGB,xterm-256color:RGB,alacritty:RGB'
 
 
 # vim: ft=tmux :
