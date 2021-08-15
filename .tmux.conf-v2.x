@@ -24,7 +24,7 @@ set -g @plugin 'seebi/tmux-colors-solarized'
 run '~/.tmux/plugins/tpm/tpm'
 # PLUGINS:END
 
-if "[ -z \"`tmuxsh rc`\" ]" '' # Apply colorscheme customizations
+run 'tmuxsh rc' # Apply colorscheme customizations
 
 
 # panes
