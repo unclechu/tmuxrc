@@ -14,7 +14,7 @@ use constant APP => basename $0;
 use constant WUT => 'Something unexpectedly went wrong…';
 
 use constant CMD_LIST =>
-	qw(help cd nocd reconf colors sync nosync tsync 4 6 bar rc);
+	qw(help cd nocd reconf colors sync nosync tsync 4h 4v 6h 6v bar rc);
 
 if (! defined($TMUX) || -z $TMUX) {
 	say STDERR 'This app cannot be used outside of tmux session';
@@ -222,21 +222,46 @@ if ($cmd eq 'help') {
 } elsif ($cmd eq 'tsync') { # toggle
 	runx qw(tmux setw synchronize-panes);
 
-} elsif (($cmd eq '4') || ($cmd eq '6')) {
+} elsif (
+	($cmd eq '4h') || ($cmd eq '4v') ||
+	($cmd eq '6h') || ($cmd eq '6v')
+) {
 
 	wrong_cmd_args \@ARGV, 'SYNCHRONIZE-PANES'
 		if (scalar(@ARGV) > 1) || ((scalar(@ARGV) == 1) && ($ARGV[0] ne '1'));
 
-	my @preset = ($cmd eq '4') ?
+	my @preset
+		= ($cmd eq '4h')
+		? qw(sp -v ; sp -h ; selectp -t 1 ; sp -h ; selectp -t 1)
 
-		qw(splitw -h ; splitw -v ; selectp -t 1 ; splitw -v) :
+		: ($cmd eq '4v')
+		? qw(sp -h ; sp -v ; selectp -t 1 ; sp -v ; selectp -t 1)
 
-		qw(
-			splitw -h ; splitw -v ; splitw -v ;
-			selectp -t 1 ; splitw -v ; splitw -v
+		: ($cmd eq '6h')
+		? qw(
+			sp -v ; sp -v
+			; selectp -t 1 ; sp -h
+			; selectp -t 3 ; sp -h
+			; selectp -t 5 ; sp -h
+			; resize-pane -t 1 -y 33%
+			; resize-pane -t 2 -y 33%
+			; resize-pane -t 3 -y 33%
+			; resize-pane -t 4 -y 33%
+			; resize-pane -t 5 -y 33%
+			; resize-pane -t 6 -y 33%
+			; selectp -t 1
+		)
+
+		: qw(
+			sp -h ; sp -v ; sp -v
+			; selectp -t 1 ; sp -v ; sp -v
+			; resize-pane -t 1 -y 33% ; resize-pane -t 2 -y 33%
+			; resize-pane -t 3 -y 33% ; resize-pane -t 4 -y 33%
+			; resize-pane -t 5 -y 33% ; resize-pane -t 6 -y 33%
+			; selectp -t 1
 		);
 
-	@preset = ('tmux', @preset, qw(; selectl tiled ; selectp -t 1));
+	@preset = ('tmux', @preset);
 	my $sync_panes = (scalar(@ARGV) == 1) ? shift : undef;
 
 	unless (defined $sync_panes) {runx @preset}
