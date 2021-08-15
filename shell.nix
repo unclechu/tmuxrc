@@ -23,6 +23,6 @@ let
 in
 pkgs.mkShell {
   buildInputs =
-    (if with-tmux   then [ tmux ]   else []) ++
-    (if with-tmuxsh then [ tmuxsh ] else []);
+    pkgs.lib.optional with-tmux tmux ++
+    pkgs.lib.optional with-tmuxsh tmuxsh;
 }
