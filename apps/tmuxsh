@@ -152,6 +152,8 @@ sub get_last_colors_state {
 	$state
 }
 
+use constant CD_ENV_VAR => '_TMUX_CD';
+
 if ($cmd eq 'help') {
 	say get_usage;
 
@@ -170,16 +172,6 @@ if ($cmd eq 'help') {
 		$arg = shift;
 	}
 
-	if ($arg eq '') {
-		say STDERR
-			q/Received empty directory value, /,
-			q/unsetting previously set directory /,
-			q/(if it have been set earlier)./;
-
-		runx qw(tmux setenv -u -- _TMUX_CD);
-		exit 0
-	}
-
 	my $dir = abs_path $arg;
 
 	if (! -d $dir) {
@@ -190,11 +182,11 @@ if ($cmd eq 'help') {
 		exit 1
 	}
 
-	runx qw(tmux setenv -- _TMUX_CD), $dir;
+	runx qw(tmux setenv --), CD_ENV_VAR, $dir;
 
 } elsif ($cmd eq 'nocd') {
 	wrong_cmd_args \@ARGV if scalar(@ARGV) != 0;
-	runx qw(tmux setenv -- _TMUX_CD), '';
+	runx qw(tmux setenv -u --), CD_ENV_VAR
 
 } elsif ($cmd eq 'reconf') {
 	reconf;
