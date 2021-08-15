@@ -109,6 +109,27 @@ sub get_env {
 	}
 }
 
+sub get_sessions {
+	my @sessions = split "\n", capturex qw(tmux list-s);
+	map {s/^([^:]+):.*$/$1/} @sessions;
+	@sessions
+}
+
+sub set_env {
+	my $env_var_name = shift;
+	my $env_var_value = shift;
+	my @sessions = get_sessions;
+
+	runx qw(tmux setenv -t), $_, '--', $env_var_name, $env_var_value
+		for @sessions
+}
+
+sub unset_env {
+	my $env_var_name = shift;
+	my @sessions = get_sessions;
+	runx qw(tmux setenv -u -t), $_, '--', $env_var_name for @sessions
+}
+
 sub reconf {runx qw(tmux source --), "$HOME/.tmux.conf"}
 
 my %bar_env_var_map = (
@@ -202,7 +223,7 @@ if ($cmd eq 'help') {
 	$color = (get_last_colors_state eq 'dark') ? 'light' : 'dark'
 		if $color eq 'toggle';
 
-	runx qw(tmux setenv --), COLORS_ENV_VAR, $color;
+	set_env COLORS_ENV_VAR, $color;
 	reconf;
 
 } elsif ($cmd eq 'sync') {
@@ -287,7 +308,7 @@ if ($cmd eq 'help') {
 
 	my $env_var = $bar_env_var_map{$bar} || die WUT;
 	say ((($to_state eq '1') ? "Showing '" : "Hiding '")."$bar' bar…");
-	runx qw(tmux setenv --), $env_var, $to_state;
+	set_env $env_var, $to_state;
 	reconf;
 
 } elsif ($cmd eq 'rc') {
