@@ -13,8 +13,16 @@ use IPC::System::Simple qw(runx capturex);
 use constant APP => basename $0;
 use constant WUT => 'Something unexpectedly went wrong…';
 
-use constant CMD_LIST =>
-	qw(help cd nocd reconf colors sync nosync tsync 3h 3v 4h 4v 6h 6v bar rc);
+use constant CMD_LIST => qw(
+	help
+	cd gcd nocd gnocd
+	sync nosync tsync
+	3h 3v 4h 4v 6h 6v
+	bar
+	colors
+	reconf
+	rc
+);
 
 if (! defined($TMUX) || -z $TMUX) {
 	say STDERR 'This app cannot be used outside of tmux session';
@@ -116,18 +124,29 @@ sub get_sessions {
 }
 
 sub set_env {
+	my $is_global = shift;
 	my $env_var_name = shift;
 	my $env_var_value = shift;
 	my @sessions = get_sessions;
 
-	runx qw(tmux setenv -t), $_, '--', $env_var_name, $env_var_value
-		for @sessions
+	if ($is_global) {
+		runx qw(tmux setenv -t), $_, '--', $env_var_name, $env_var_value
+			for @sessions
+	} else {
+		runx qw(tmux setenv --), $env_var_name, $env_var_value
+	}
 }
 
 sub unset_env {
+	my $is_global = shift;
 	my $env_var_name = shift;
 	my @sessions = get_sessions;
-	runx qw(tmux setenv -u -t), $_, '--', $env_var_name for @sessions
+
+	if ($is_global) {
+		runx qw(tmux setenv -u -t), $_, '--', $env_var_name for @sessions
+	} else {
+		runx qw(tmux setenv -u --), $env_var_name
+	}
 }
 
 sub reconf {runx qw(tmux source --), "$HOME/.tmux.conf"}
@@ -178,22 +197,19 @@ use constant CD_ENV_VAR => '_TMUX_CD';
 if ($cmd eq 'help') {
 	say get_usage;
 
-} elsif ($cmd eq 'cd') {
-
-	wrong_cmd_args \@ARGV, 'DIRECTORY' if scalar(@ARGV) > 1;
-	my $arg;
+} elsif (($cmd eq 'cd') || ($cmd eq 'gcd')) {
+	wrong_cmd_args \@ARGV, '[DIRECTORY]' if scalar(@ARGV) > 1;
+	my $dir;
 
 	if (scalar(@ARGV) == 0) {
 		say STDERR
 			q/Received no directory value, /,
 			q/interpreting this as HOME directory./;
 
-		$arg = $HOME;
+		$dir = abs_path $HOME;
 	} else {
-		$arg = shift;
+		$dir = abs_path shift;
 	}
-
-	my $dir = abs_path $arg;
 
 	if (! -d $dir) {
 		say STDERR
@@ -203,11 +219,11 @@ if ($cmd eq 'help') {
 		exit 1
 	}
 
-	runx qw(tmux setenv --), CD_ENV_VAR, $dir;
+	set_env +($cmd eq 'gcd'), CD_ENV_VAR, $dir
 
-} elsif ($cmd eq 'nocd') {
+} elsif (($cmd eq 'nocd') || ($cmd eq 'gnocd')) {
 	wrong_cmd_args \@ARGV if scalar(@ARGV) != 0;
-	runx qw(tmux setenv -u --), CD_ENV_VAR
+	unset_env +($cmd eq 'gnocd'), CD_ENV_VAR
 
 } elsif ($cmd eq 'reconf') {
 	reconf;
@@ -223,7 +239,7 @@ if ($cmd eq 'help') {
 	$color = (get_last_colors_state eq 'dark') ? 'light' : 'dark'
 		if $color eq 'toggle';
 
-	set_env COLORS_ENV_VAR, $color;
+	set_env 1, COLORS_ENV_VAR, $color;
 	reconf;
 
 } elsif ($cmd eq 'sync') {
@@ -308,7 +324,7 @@ if ($cmd eq 'help') {
 
 	my $env_var = $bar_env_var_map{$bar} || die WUT;
 	say ((($to_state eq '1') ? "Showing '" : "Hiding '")."$bar' bar…");
-	set_env $env_var, $to_state;
+	set_env 1, $env_var, $to_state;
 	reconf;
 
 } elsif ($cmd eq 'rc') {
