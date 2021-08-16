@@ -22,6 +22,7 @@ use constant CMD_LIST => qw(
 	colors
 	reconf
 	rc
+	gget
 );
 
 if (! defined($TMUX) || -z $TMUX) {
@@ -98,27 +99,8 @@ sub expand_wrong_cmd_args {
 	$cmd
 }
 
-sub get_env {
-	my $env_var = shift;
-	open OLD_STDERR, '<&STDERR';
-	open STDERR, '>', File::Spec->devnull();
-	my @get_cmd = qw(tmux showenv);
-	push @get_cmd, '--', $env_var if defined $env_var;
-	chomp(my $val = eval {capturex @get_cmd});
-	open STDERR, '>&OLD_STDERR';
-	$val =~ s/^$env_var=// if defined($env_var) && defined($val);
-
-	unless (defined $env_var) {
-		my %res = ();
-		do {$res{$1} = $2 if /^([^=]+)=(.+)$/} for split '\n', $val;
-		%res
-	} else {
-		$val
-	}
-}
-
 sub get_sessions {
-	my @sessions = split "\n", capturex qw(tmux list-s);
+	my @sessions = split "\n", capturex qw(tmux ls);
 	map {s/^([^:]+):.*$/$1/} @sessions;
 	@sessions
 }
@@ -135,6 +117,46 @@ sub set_env {
 	} else {
 		runx qw(tmux setenv --), $env_var_name, $env_var_value
 	}
+}
+
+# returns “undef” if value is not found
+sub get_env {
+	my $is_global = shift;
+	my $env_var = shift;
+
+	my $val;
+	my @sessions = get_sessions;
+
+	open ORIGINAL_STDERR, '<&STDERR';
+	open STDERR, '>', File::Spec->devnull();
+	chomp($val = eval {capturex qw(tmux showenv), '--', $env_var});
+	open STDERR, '>&ORIGINAL_STDERR';
+	$val =~ s/^$env_var=// if defined($val);
+
+	if ($is_global) {
+		my @sessions_where_not_found = ();
+
+		for (@sessions) {
+			open STDERR, '>', File::Spec->devnull();
+			chomp(my $session_var_val = eval {
+				capturex qw(tmux showenv -t), $_, '--', $env_var
+			});
+			open STDERR, '>&ORIGINAL_STDERR';
+			$session_var_val =~ s/^$env_var=// if defined($session_var_val);
+
+			if (!defined($val) && defined($session_var_val)) {
+				$val = $session_var_val
+			} elsif (!defined($session_var_val)) {
+				push @sessions_where_not_found, $_
+			}
+		}
+
+		if ((@sessions_where_not_found > 0) && defined($val)) {
+			runx qw(tmux setenv -t), $_, '--', $env_var, $val for @sessions
+		}
+	}
+
+	$val
 }
 
 sub unset_env {
@@ -167,7 +189,7 @@ sub get_last_bar_state {
 	my $bar      = shift;
 	my $prev_val = shift;
 
-	$prev_val = get_env ($bar_env_var_map{$bar} || die WUT)
+	$prev_val = get_env 1, ($bar_env_var_map{$bar} || die WUT)
 		unless defined $prev_val;
 
 	my $get_default = sub {
@@ -185,7 +207,7 @@ use constant COLORS_ENV_VAR => '_TMUX_COLORS';
 use constant COLORS_DEFAULT => 'dark';
 
 sub get_last_colors_state {
-	my $state = get_env COLORS_ENV_VAR;
+	my $state = get_env 1, COLORS_ENV_VAR;
 	$state = COLORS_DEFAULT if $@;
 	die WUT if $state ne 'dark' && $state ne 'light' && $state ne '';
 	$state = COLORS_DEFAULT if $state eq '';
@@ -327,6 +349,14 @@ if ($cmd eq 'help') {
 	set_env 1, $env_var, $to_state;
 	reconf;
 
+} elsif ($cmd eq 'gget') {
+	wrong_cmd_args \@ARGV, 'VAR-NAME'
+		if (scalar(@ARGV) != 1) || ($ARGV[0] eq '');
+
+	my $val = get_env 1, $ARGV[0];
+	die "Variable “$ARGV[0]” is not found!" unless defined $val;
+	say $val
+
 } elsif ($cmd eq 'rc') {
 	# helper for generating options for '.tmux.conf'
 
@@ -365,11 +395,9 @@ if ($cmd eq 'help') {
 	}
 
 	sub {
-		my %tmux_env = get_env;
-
 		my $get_last = sub {
 			my $bar = shift;
-			get_last_bar_state $bar, ($tmux_env{$bar_env_var_map{$bar}} || '')
+			get_last_bar_state $bar, (get_env(1, $bar_env_var_map{$bar}) || '')
 		};
 
 		my $is_session_on = $get_last->('session');
