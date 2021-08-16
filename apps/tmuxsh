@@ -208,9 +208,8 @@ use constant COLORS_DEFAULT => 'dark';
 
 sub get_last_colors_state {
 	my $state = get_env 1, COLORS_ENV_VAR;
-	$state = COLORS_DEFAULT if $@;
-	die WUT if $state ne 'dark' && $state ne 'light' && $state ne '';
-	$state = COLORS_DEFAULT if $state eq '';
+	$state = COLORS_DEFAULT unless defined $state;
+	die WUT if $state ne 'dark' && $state ne 'light';
 	$state
 }
 
