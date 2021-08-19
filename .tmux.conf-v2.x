@@ -9,6 +9,8 @@ set -g renumber-windows on
 set -g base-index 1
 set -g pane-base-index 1
 
+set -g focus-events on
+
 
 set -g mode-keys vi
 bind -T copy-mode-vi 'v' send -X begin-selection
