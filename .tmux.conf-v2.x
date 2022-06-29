@@ -20,6 +20,10 @@ bind -T copy-mode-vi 'y' send -X copy-selection
 bind C-Left  swapw -t -1
 bind C-Right swapw -t +1
 
+# split window preserving working directory of a selected pane
+bind -T prefix S split-window -c '#{pane_current_path}'
+bind -T prefix V split-window -c '#{pane_current_path}' -h
+
 
 # PLUGINS:BEGIN
 set -g @plugin 'seebi/tmux-colors-solarized'
