@@ -26,7 +26,7 @@ in
 
   # This is optional. In case you need ‘tmuxsh’ script always available.
   environment.systemPackages = [
-    tmux-config.tmuxsh
+    tmuxConfig.tmuxsh
   ];
 }
 ```
@@ -67,10 +67,10 @@ nix-shell --run tmux
    ~/.my-tmux-config/apps/tmuxsh help
    ```
 
-1. Either create a symlink `~/.tmux.conf` that points to [.tmux.conf-v2.x] file:
+1. Either create a symlink `~/.tmux.conf` that points to [.tmux.conf] file:
 
    ``` sh
-   ln -s ~/.my-tmux-config/.tmux.conf-v2.x ~/.tmux.conf
+   ln -s ~/.my-tmux-config/.tmux.conf ~/.tmux.conf
    ```
 
    Or if you want to be able to add some local changes to the config create new
@@ -80,10 +80,10 @@ nix-shell --run tmux
    touch ~/.tmux.conf
    ```
 
-   And include [.tmux.conf-v2.x] in that file and add some local changes:
+   And include [.tmux.conf] in that file and add some local changes:
 
    ``` tmux
-   source ~/.my-tmux-config/.tmux.conf-v2.x
+   source ~/.my-tmux-config/.tmux.conf
    set -g prefix ^B
    ```
 
@@ -104,6 +104,6 @@ nix-shell --run tmux
 
 Viacheslav Lotsmanov
 
-[.tmux.conf-v2.x]: .tmux.conf-v2.x
+[.tmux.conf]: .tmux.conf
 [apps/tmuxsh]: apps/tmuxsh
 [tpm]: tpm

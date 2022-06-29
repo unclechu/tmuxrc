@@ -16,7 +16,7 @@ let sources = import nix/sources.nix; in
 
 # ↓ Build options ↓
 
-, __srcConfigFile ? ./.tmux.conf-v2.x
+, __srcConfigFile ? ./.tmux.conf
 
 # Make ‘tmuxsh’ available for calling it manually (inside ‘tmux’ session).
 # This is not necessary if you add ‘tmuxsh’ to ‘environment.systemPackages’ in
