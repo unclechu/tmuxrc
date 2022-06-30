@@ -6,9 +6,6 @@ let sources = import nix/sources.nix; in
 { pkgs ? import sources.nixpkgs {}
 , lib ? pkgs.lib
 
-# Overridable dependencies
-, __nix-utils ? pkgs.callPackage sources.nix-utils {}
-
 , inNixShell ? false
 
 # ↓ Build options ↓
@@ -30,13 +27,13 @@ let
   dash-exe = "${pkgs.dash}/bin/dash";
   tmux-exe = "${pkgs.tmux}/bin/tmux";
 
-  inherit (__nix-utils) lines unlines;
+  lines = str: builtins.filter builtins.isString (builtins.split "\n" str);
+  unlines = builtins.concatStringsSep "\n";
 
   # ‘tmuxsh’ for the tmux config itself, without ‘tmux-conf-file’ argument.
   # Otherwise it would be a recursive dependency.
   # ‘tmuxsh rc’ that tmux config is calling doesn’t depend on that argument.
   tmuxsh = pkgs.callPackage nix/apps/tmuxsh.nix {
-    inherit __nix-utils;
     tmux-conf-file = null;
   };
 
@@ -126,7 +123,6 @@ let
 
   # ‘tmuxsh’ that is provided for the user for manual calls
   exported-tmuxsh = pkgs.callPackage nix/apps/tmuxsh.nix {
-    inherit __nix-utils;
     tmux-conf-file = configFile;
   };
 

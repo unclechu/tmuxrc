@@ -2,13 +2,9 @@
 # License: Public Domain https://raw.githubusercontent.com/unclechu/tmuxrc/master/LICENSE
 
 let sources = import ../sources.nix; in
-# This module is intended to be called with ‘nixpkgs.callPackage’
-{ callPackage
-, lib
-, perl
-
-# Overridable dependencies
-, __nix-utils ? callPackage sources.nix-utils {}
+{ pkgs ? import sources.nixpkgs {}
+, lib ? pkgs.lib
+, perl ? pkgs.perl
 
 # ↓ Build options ↓
 
@@ -19,33 +15,44 @@ let sources = import ../sources.nix; in
 , tmux-conf-file
 }:
 let
-  inherit (__nix-utils)
-    writeCheckedExecutable wrapExecutableWithPerlDeps shellCheckers;
-
+  esc = lib.escapeShellArg;
   perl-exe = "${perl}/bin/perl";
 
   script =
     assert ! isNull tmux-conf-file -> lib.isDerivation tmux-conf-file;
-    writeCheckedExecutable "tmuxsh" ''
-      ${shellCheckers.fileIsExecutable perl-exe}
-      ${
-        if isNull tmux-conf-file then "" else
-        shellCheckers.fileIsReadable (toString tmux-conf-file)
-      }
-    '' ''
-      #! ${perl-exe}
-      ${
-        (
-          if isNull tmux-conf-file
-          then x: x
-          else builtins.replaceStrings
-                 ["\"$HOME/.tmux.conf\""]
-                 ["q<${tmux-conf-file}>"]
-        )
-          (builtins.readFile __srcScript)
-      }
+    let
+      replaceTmuxConfPath =
+        builtins.replaceStrings ["\"$HOME/.tmux.conf\""] ["q<${tmux-conf-file}>"];
+      processScript =
+        if isNull tmux-conf-file then lib.id else replaceTmuxConfPath;
+    in
+    pkgs.writeTextFile rec {
+      name = "tmuxsh";
+      executable = true;
+      destination = "/bin/${name}";
+      text = ''
+        #! ${perl-exe}
+        ${processScript (builtins.readFile __srcScript)}
+      '';
+      checkPhase = ''(
+        set -o nounset
+        set -o xtrace
+        (f=${esc perl-exe}; [[ -f $f && -r $f && -x $f ]])
+
+        ${lib.optionalString (! isNull tmux-conf-file) ''
+          (f=${esc "${tmux-conf-file}"}; [[ -f $f && -r $f ]])
+        ''}
+      )'';
+    };
+
+  scriptWithPerlDeps = pkgs.symlinkJoin {
+    name = "${lib.getName script}-wrapper";
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    paths = [ script ];
+    postBuild = ''
+      wrapProgram "$out"/bin/${esc (lib.getName script)} \
+        --set PERL5LIB ${esc (with pkgs.perlPackages; makePerlPath [ IPCSystemSimple ])}
     '';
+  };
 in
-wrapExecutableWithPerlDeps "${script}/bin/${script.name}" {
-  deps = p: [ p.IPCSystemSimple ];
-}
+  scriptWithPerlDeps
