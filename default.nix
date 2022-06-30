@@ -3,16 +3,13 @@
 
 let sources = import nix/sources.nix; in
 # This module is intended to be called with ‘nixpkgs.callPackage’
-{ callPackage
-, runCommand
-, writeTextFile
-, lib
-, findutils
-, tmuxPlugins
-, tmux
+{ pkgs ? import sources.nixpkgs {}
+, lib ? pkgs.lib
 
 # Overridable dependencies
-, __nix-utils ? callPackage sources.nix-utils {}
+, __nix-utils ? pkgs.callPackage sources.nix-utils {}
+
+, inNixShell ? false
 
 # ↓ Build options ↓
 
@@ -24,15 +21,21 @@ let sources = import nix/sources.nix; in
 # version only, in ‘configuration.nix’ you set just tmux config file
 # (to ‘programs.tmux.extraConfig’) and this dependency wouldn’t be provided
 # anyway if you don’t add it to ‘environment.systemPackages’.
-, with-tmuxsh ? false
+, with-tmuxsh ? inNixShell
+
+, with-tmux ? inNixShell
 }:
 let
-  inherit (__nix-utils) esc lines unlines wrapExecutable shellCheckers;
+  esc = lib.escapeShellArg;
+  dash-exe = "${pkgs.dash}/bin/dash";
+  tmux-exe = "${pkgs.tmux}/bin/tmux";
+
+  inherit (__nix-utils) lines unlines;
 
   # ‘tmuxsh’ for the tmux config itself, without ‘tmux-conf-file’ argument.
   # Otherwise it would be a recursive dependency.
   # ‘tmuxsh rc’ that tmux config is calling doesn’t depend on that argument.
-  tmuxsh = callPackage nix/apps/tmuxsh.nix {
+  tmuxsh = pkgs.callPackage nix/apps/tmuxsh.nix {
     inherit __nix-utils;
     tmux-conf-file = null;
   };
@@ -74,17 +77,19 @@ let
 
   pluginsLoadingCommandsFile =
     let
-      find = "${findutils}/bin/find";
+      find = "${pkgs.findutils}/bin/find";
 
       plugins = builtins.concatStringsSep "\n" (
-        builtins.map (x: tmuxPlugins.${x}) pluginsSplit.plugins
+        builtins.map (x: pkgs.tmuxPlugins.${x}) pluginsSplit.plugins
       );
     in
-      runCommand "tmux-plugin-imports" {
+      pkgs.runCommand "tmux-plugin-imports" {
         inherit plugins;
         passAsFile = [ "plugins" ];
       } ''
-        set -Eeuo pipefail || exit
+        set -o errexit || exit
+        set -o nounset
+        set -o pipefail
         readarray -t PLUGINS < "$pluginsPath"
 
         for plugin in "''${PLUGINS[@]}"; do
@@ -109,32 +114,63 @@ let
     ${unlines pluginsSplit.post}
   '';
 
-  configFile = writeTextFile {
+  configFile = pkgs.writeTextFile {
     name = "tmux.conf";
     text = config;
-    checkPhase = ''
-      set -Eeuo pipefail || exit
-      ${shellCheckers.fileIsExecutable tmuxsh-exe}
-    '';
+    checkPhase = ''(
+      set -o nounset
+      set -o xtrace
+      (f=${esc tmuxsh-exe}; [[ -f $f && -r $f && -x $f ]])
+    )'';
   };
 
   # ‘tmuxsh’ that is provided for the user for manual calls
-  exported-tmuxsh = callPackage nix/apps/tmuxsh.nix {
+  exported-tmuxsh = pkgs.callPackage nix/apps/tmuxsh.nix {
     inherit __nix-utils;
     tmux-conf-file = configFile;
   };
+
+  wenzels-tmux = pkgs.writeTextFile rec {
+    name = "wenzels-tmux";
+    executable = true;
+    destination = "/bin/tmux";
+    text = ''
+      #! ${dash-exe}
+      ${
+        lib.optionalString
+          with-tmuxsh
+          "PATH=${esc (lib.makeBinPath [ exported-tmuxsh ])}\${PATH:+:}\${PATH:-} "
+      }exec ${esc tmux-exe} -f ${esc configFile} "$@"
+    '';
+    checkPhase = ''(
+      set -o nounset
+      set -o xtrace
+      (f=${esc dash-exe}; [[ -f $f && -r $f && -x $f ]])
+      (f=${esc tmux-exe}; [[ -f $f && -r $f && -x $f ]])
+      ${lib.optionalString with-tmuxsh ''
+        (f=${esc "${exported-tmuxsh}/bin/tmuxsh"}; [[ -f $f && -r $f && -x $f ]])
+      ''}
+      (f=${esc configFile}; [[ -f $f && -r $f ]])
+    )'';
+  };
+
+  shell = pkgs.stdenv.mkDerivation rec {
+    name = "${lib.getName wenzels-tmux}-shell";
+    dontUnpack = true; # Make it buildable without “src” attribute
+
+    buildInputs =
+      lib.optional with-tmux wenzels-tmux
+      ++ lib.optional with-tmuxsh exported-tmuxsh;
+
+    installPhase = ''(
+      set -o nounset
+      touch -- "$out"
+      printf '%s\n' ${pkgs.lib.escapeShellArgs (map (x: "${x}") buildInputs)} >> "$out"
+    )'';
+  };
 in
-wrapExecutable "${tmux}/bin/tmux" {
-  deps = if with-tmuxsh then [ exported-tmuxsh ] else [];
-  args = [ "-f" configFile ];
-  checkPhase = ''
-    ${
-      if with-tmuxsh
-      then shellCheckers.fileIsExecutable "${exported-tmuxsh}/bin/tmuxsh"
-      else ""
-    }
-  '';
-} // {
-  inherit config configFile pluginsLoadingCommandsFile;
+(if inNixShell then shell else {}) // {
+  inherit config configFile pluginsLoadingCommandsFile shell;
+  tmux = wenzels-tmux;
   tmuxsh = exported-tmuxsh;
 }
