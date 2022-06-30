@@ -5,6 +5,10 @@ let sources = import nix/sources.nix; in
 # This module is intended to be called with ‘nixpkgs.callPackage’
 { pkgs ? import sources.nixpkgs {}
 , lib ? pkgs.lib
+, tmux ? pkgs.tmux
+, tmuxPlugins ? pkgs.tmuxPlugins
+, dash ? pkgs.dash
+, findutils ? pkgs.findutils
 
 , inNixShell ? false
 
@@ -24,8 +28,8 @@ let sources = import nix/sources.nix; in
 }:
 let
   esc = lib.escapeShellArg;
-  dash-exe = "${pkgs.dash}/bin/dash";
-  tmux-exe = "${pkgs.tmux}/bin/tmux";
+  dash-exe = "${dash}/bin/dash";
+  tmux-exe = "${tmux}/bin/tmux";
 
   lines = str: builtins.filter builtins.isString (builtins.split "\n" str);
   unlines = builtins.concatStringsSep "\n";
@@ -74,10 +78,10 @@ let
 
   pluginsLoadingCommandsFile =
     let
-      find = "${pkgs.findutils}/bin/find";
+      find = "${findutils}/bin/find";
 
       plugins = builtins.concatStringsSep "\n" (
-        builtins.map (x: pkgs.tmuxPlugins.${x}) pluginsSplit.plugins
+        builtins.map (x: tmuxPlugins.${x}) pluginsSplit.plugins
       );
     in
       pkgs.runCommand "tmux-plugin-imports" {
