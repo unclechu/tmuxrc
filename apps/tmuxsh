@@ -174,14 +174,16 @@ sub unset_env {
 sub reconf {runx qw(tmux source --), "$HOME/.tmux.conf"}
 
 my %bar_env_var_map = (
-	session     => '_TMUX_BAR_SESSION',
-	socket      => '_TMUX_BAR_SOCKET',
+	hostname => '_TMUX_BAR_HOSTNAME',
+	session => '_TMUX_BAR_SESSION',
+	socket => '_TMUX_BAR_SOCKET',
 	'pane-path' => '_TMUX_BAR_PANE_PATH',
 );
 
 my %bar_state_defaults = (
-	session     => '1',
-	socket      => '0',
+	hostname => '1',
+	session => '1',
+	socket => '0',
 	'pane-path' => '0',
 );
 
@@ -325,7 +327,13 @@ if ($cmd eq 'help') {
 	else {runx @preset, qw(; setw synchronize-panes)}
 
 } elsif ($cmd eq 'bar') {
-	my $bar    = expand_wrong_cmd_args \@ARGV, 1, qw(session socket pane-path);
+	my $bar = expand_wrong_cmd_args \@ARGV, 1, qw(
+		hostname
+		session
+		socket
+		pane-path
+	);
+
 	my $action = expand_wrong_cmd_args \@ARGV, 0, qw(*toggle* on off show);
 
 	if ($action eq 'show') {
@@ -399,14 +407,16 @@ if ($cmd eq 'help') {
 			get_last_bar_state $bar, (get_env(1, $bar_env_var_map{$bar}) || '')
 		};
 
+		my $is_hostname_on = $get_last->('hostname');
 		my $is_session_on = $get_last->('session');
-		my $is_socket_on  = $get_last->('socket');
-		my $is_pane_path  = $get_last->('pane-path');
+		my $is_socket_on = $get_last->('socket');
+		my $is_pane_path = $get_last->('pane-path');
 
 		my @bars = do {
 			@_ = ();
-			push @_, 'session_name'      if $is_session_on;
-			push @_, 'socket_path'       if $is_socket_on;
+			push @_, 'host_short' if $is_hostname_on;
+			push @_, 'session_name' if $is_session_on;
+			push @_, 'socket_path' if $is_socket_on;
 			push @_, 'pane_current_path' if $is_pane_path;
 			@_
 		};
@@ -427,24 +437,47 @@ if ($cmd eq 'help') {
 		}
 
 		my $status = do {
-			my $l   = $one_bar_max_len;
-			my $fg  = $is_dark ? 'colour233' : 'colour254';
+			my $l = $one_bar_max_len;
+			my $fg = $is_dark ? 'colour233' : 'colour254';
 			my $bgw = $is_dark ? 'colour234' : 'colour7'; # windows list bg
 			my $bg1 = 'colour245';
 			my $bg2 = 'colour241';
 
-			if (scalar(@bars) == 3) {
-				"#[fg=$fg,bg=$bg1,bold] #{=-$l:$bars[0]} "
-					. "#[bg=$bg2] #{=-$l:$bars[1]} "
-					. "#[bg=$bg1] #{=-$l:$bars[2]} "
-					. "#[bg=$bgw] "
-			} elsif (scalar(@bars) == 2) {
-				"#[fg=$fg,bg=$bg1,bold] #{=-$l:$bars[0]} "
-					. "#[bg=$bg2] #{=-$l:$bars[1]} #[bg=$bgw] "
-			} elsif (scalar(@bars) == 1) {
-				my $bg3 = $is_dark ? $bg1 : $bg2;
-				"#[fg=$fg,bg=$bg3,bold] #{=-$l:$bars[0]} #[bg=$bgw] "
-			} else {die WUT}
+			# my $initial_bg = $is_dark ? $bg1 : $bg2;
+			my $initial_bg = $bg1;
+
+			my $result = '';
+
+			# # Contrast to the tab color
+			# for (
+			# 	$result = "#[bg=$bgw] ",
+			# 	my $i = @bars - 1,
+			# 	my $bg = $initial_bg
+			# 	;
+			# 	$i >= 0
+			# 	;
+			# 	--$i,
+			# 	$bg = ($bg eq $bg1) ? $bg2 : $bg1
+			# ) {
+			# 	$result = "#[bg=$bg] #{=-$l:$bars[$i]} $result"
+			# }
+
+			# The first color is the same as the last color
+			# on the right side of the bar.
+			for (
+				my $i = 0,
+				my $bg = $initial_bg
+				;
+				$i < scalar(@bars)
+				;
+				++$i,
+				$bg = ($bg eq $bg1) ? $bg2 : $bg1
+			) {
+				$result .= "#[bg=$bg] #{=-$l:$bars[$i]} ";
+				$result .= "#[bg=$bgw] " if ($i == scalar(@bars) - 1)
+			}
+
+			"#[fg=$fg,bold]$result"
 		};
 
 		my @x = (qw(set -g status-left), $status);
