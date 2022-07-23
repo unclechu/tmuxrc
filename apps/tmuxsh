@@ -121,8 +121,8 @@ sub set_env {
 
 # returns “undef” if value is not found
 sub get_env {
-	my $is_global = shift;
-	my $env_var = shift;
+	my $is_global = shift; # bool (as int)
+	my $env_var = shift; # string
 
 	my $val;
 	my @sessions = get_sessions;
@@ -188,8 +188,8 @@ my %bar_state_defaults = (
 );
 
 sub get_last_bar_state {
-	my $bar      = shift;
-	my $prev_val = shift;
+	my $bar = shift; # string
+	my $prev_val = shift; # string
 
 	$prev_val = get_env 1, ($bar_env_var_map{$bar} || die WUT)
 		unless defined $prev_val;
@@ -199,7 +199,7 @@ sub get_last_bar_state {
 		$prev_val = $bar_state_defaults{$bar};
 	};
 
-	$get_default->() if $@;
+	$get_default->() unless defined $prev_val;
 	die WUT if $prev_val ne '1' && $prev_val ne '0' && $prev_val ne '';
 	return $get_default->() if $prev_val eq '';
 	($prev_val eq '1') ? '1' : '0';
@@ -403,8 +403,9 @@ if ($cmd eq 'help') {
 
 	sub {
 		my $get_last = sub {
-			my $bar = shift;
-			get_last_bar_state $bar, (get_env(1, $bar_env_var_map{$bar}) || '')
+			my $bar = shift; # string
+			my $x = get_env 1, ($bar_env_var_map{$bar} || die WUT);
+			get_last_bar_state $bar, (defined($x) ? $x : '')
 		};
 
 		my $is_hostname_on = $get_last->('hostname');
@@ -448,7 +449,7 @@ if ($cmd eq 'help') {
 
 			my $result = '';
 
-			# # Contrast to the tab color
+			# # The most right bar piece contrasts the active tab color
 			# for (
 			# 	$result = "#[bg=$bgw] ",
 			# 	my $i = @bars - 1,
@@ -462,7 +463,7 @@ if ($cmd eq 'help') {
 			# 	$result = "#[bg=$bg] #{=-$l:$bars[$i]} $result"
 			# }
 
-			# The first color is the same as the last color
+			# The first bar piece color is always the same as the last color
 			# on the right side of the bar.
 			for (
 				my $i = 0,
