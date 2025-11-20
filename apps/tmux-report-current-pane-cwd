@@ -1,0 +1,46 @@
+#! /usr/bin/env bash
+set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
+
+# Report currently selected tmux pane working directory to X11.
+#
+# Sets custom X11 property for the window: `TMUX_PANE_CWD`.
+# If window have `TMUX_PANE_CWD` property it means it a terminal emulator with
+# an opened tmux session inside. When opening new tmuxed terminals with new
+# session this value can be read to `cd` to that path. So `cd`-ing to the
+# current working directory of the selected window kind of (of the current tmux
+# pane selected inside the tmux session in that window).
+
+: "${TMUX_EXE:=tmux}"
+
+# Guard dependencies
+>/dev/null type xprop "$TMUX_EXE"
+
+TERMINAL_WINDOW_ID=$("$TMUX_EXE" display-message -p '#{WINDOWID}')
+DISPLAY=$("$TMUX_EXE" display-message -p '#{DISPLAY}')
+export DISPLAY
+
+if [[ -z $TERMINAL_WINDOW_ID || -z $DISPLAY ]]; then
+	# Silently do nothing.
+	# It can be a normal operation scenario,
+	# like user is attached to the session from remote SSH session.
+	exit 0
+fi
+
+PANE_CWD=$("$TMUX_EXE" display-message -p "#{pane_current_path}")
+
+if [[ -z $PANE_CWD ]]; then
+	>&2 echo 'Error: Could not read current pane CWD.'
+	exit 1
+fi
+
+X_VAR_NAME=TMUX_PANE_CWD
+
+XPROP_CMD=(
+	xprop
+	-id "$TERMINAL_WINDOW_ID"
+	-f "$X_VAR_NAME" 8s
+	-set "$X_VAR_NAME"
+	"$PANE_CWD"
+)
+
+"${XPROP_CMD[@]}"

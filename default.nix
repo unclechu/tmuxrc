@@ -24,6 +24,8 @@ let sources = import nix/sources.nix; in
 # anyway if you don’t add it to ‘environment.systemPackages’.
 , with-tmuxsh ? inNixShell
 
+, with-tmux-report-current-pane-cwd ? inNixShell
+
 , with-tmux ? inNixShell
 }:
 let
@@ -44,13 +46,29 @@ let
   tmuxsh-exe = "${tmuxsh}/bin/tmuxsh";
   replace-tmuxsh = builtins.replaceStrings [ "tmuxsh" ] [ tmuxsh-exe ];
 
+  tmux-report-current-pane-cwd =
+    pkgs.callPackage nix/apps/tmux-report-current-pane-cwd.nix {};
+
+  tmux-report-current-pane-cwd-exe =
+    "${tmux-report-current-pane-cwd}/bin/tmux-report-current-pane-cwd";
+
+  replace-tmux-report-current-pane-cwd =
+    builtins.replaceStrings
+      [ "tmux-report-current-pane-cwd" ]
+      [ tmux-report-current-pane-cwd-exe ];
+
   pluginsSplit =
     let
       initial = { place = "pre"; pre = []; plugins = []; post = []; };
 
       result =
-        builtins.foldl' reducer initial
-          (lines (replace-tmuxsh (builtins.readFile __srcConfigFile)));
+        builtins.foldl' reducer initial (lines (
+          lib.pipe __srcConfigFile [
+            builtins.readFile
+            replace-tmuxsh
+            replace-tmux-report-current-pane-cwd
+          ]
+        ));
 
       reducer = acc: line: acc // (
         if acc.place == "pre"
@@ -140,6 +158,10 @@ let
         lib.optionalString
           with-tmuxsh
           "PATH=${esc (lib.makeBinPath [ exported-tmuxsh ])}\${PATH:+:}\${PATH:-} "
+      }${
+        lib.optionalString
+          with-tmux-report-current-pane-cwd
+          "PATH=${esc (lib.makeBinPath [ tmux-report-current-pane-cwd ])}\${PATH:+:}\${PATH:-} "
       }exec ${esc tmux-exe} -f ${esc configFile} "$@"
     '';
     checkPhase = ''(
@@ -149,6 +171,9 @@ let
       (f=${esc tmux-exe}; [[ -f $f && -r $f && -x $f ]])
       ${lib.optionalString with-tmuxsh ''
         (f=${esc "${exported-tmuxsh}/bin/tmuxsh"}; [[ -f $f && -r $f && -x $f ]])
+      ''}
+      ${lib.optionalString with-tmux-report-current-pane-cwd ''
+        (f=${esc "${tmux-report-current-pane-cwd}/bin/tmux-report-current-pane-cwd"}; [[ -f $f && -r $f && -x $f ]])
       ''}
       (f=${esc configFile}; [[ -f $f && -r $f ]])
     )'';
@@ -160,7 +185,8 @@ let
 
     buildInputs =
       lib.optional with-tmux wenzels-tmux
-      ++ lib.optional with-tmuxsh exported-tmuxsh;
+      ++ lib.optional with-tmuxsh exported-tmuxsh
+      ++ lib.optional with-tmuxsh tmux-report-current-pane-cwd;
 
     installPhase = ''(
       set -o nounset
@@ -173,4 +199,5 @@ in
   inherit config configFile pluginsLoadingCommandsFile shell;
   tmux = wenzels-tmux;
   tmuxsh = exported-tmuxsh;
+  inherit tmux-report-current-pane-cwd;
 }
