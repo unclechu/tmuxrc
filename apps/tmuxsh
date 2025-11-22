@@ -6,7 +6,7 @@ use v5.10; use strict; use warnings; use autodie qw(:all);
 use Env qw(HOME TMUX);
 use Cwd qw(abs_path);
 use List::Util qw(first);
-use File::Spec qw(devnull);
+use File::Spec ();
 use File::Basename qw(basename);
 use IPC::System::Simple qw(runx capturex);
 
