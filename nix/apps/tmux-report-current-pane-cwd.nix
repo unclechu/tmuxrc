@@ -8,7 +8,7 @@ let sources = import ../sources.nix; in
 
 , bash ? pkgs.bash
 , tmux ? pkgs.tmux
-, xorg ? pkgs.xorg
+, xprop ? pkgs.xprop
 
 # ↓ Build options ↓
 
@@ -19,7 +19,7 @@ let
   executables = {
     bash = bash;
     tmux = tmux;
-    xprop = xorg.xprop;
+    xprop = xprop;
   };
 
   esc = lib.escapeShellArg;
