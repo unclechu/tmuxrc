@@ -1,0 +1,125 @@
+name: Nix CI
+
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  tmuxrc-nix-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+            system-features = nixos-test benchmark big-parallel kvm
+
+      - name: Build this tmux config and run a smoke test
+        shell: bash
+        run: |
+          set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
+
+          SMOKE_TEST_CMD='(
+            set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
+
+            tmux_path=$(type -P tmux)
+            printf "tmux path: “%s”\n" "$tmux_path"
+
+            case "$tmux_path" in
+              /nix/store/*-wenzels-tmux/bin/tmux)
+                ;;
+              *)
+                >&2 printf "Unexpected tmux path: “%s”\n" "$tmux_path"
+                exit 1
+                ;;
+            esac
+
+            smoke_dir="$(mktemp -d)"
+            socket="$smoke_dir/tmux.sock"
+            export HOME="$smoke_dir/home"
+            export TMPDIR="$smoke_dir/tmp"
+            mkdir -p -- "$HOME" "$TMPDIR"
+
+            # Cleanup background tmux session
+            cleanup() {
+              tmux -S "$socket" kill-server &>/dev/null || true
+              rm -rf -- "$smoke_dir"
+            }
+            trap cleanup EXIT
+
+            tmux -S "$socket" new-session -d -s smoke "sleep 30s"
+            tmux -S "$socket" has-session -t smoke
+
+            actual="$(
+              tmux -S "$socket" display-message -p -t smoke \
+                "#{session_name}:#{pane_current_command}"
+            )"
+
+            expected="smoke:sleep"
+
+            if [[ "$actual" != "$expected" ]]; then
+              >&2 printf "[FAIL] tmux smoke test failed!\n"
+              >&2 printf "[FAIL] Expected “%s” while got: “%s”\n" "$expected" "$actual"
+              exit 1
+            fi
+
+            tmux -S "$socket" kill-server
+          )'
+
+          if (set -o xtrace; nix-shell --pure --run "$SMOKE_TEST_CMD"); then
+            echo '[OK] Smoke test passed'
+          else
+            >&2 echo '[FAIL] Smoke test failed'
+            exit 1
+          fi
+
+      - name: Everything builds successfully and output amounts is correct
+        shell: bash
+        run: |
+          set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
+
+          NIX_CONFIG_PATH=$PWD/default.nix
+
+          # Regular build
+          (
+            DIR=$(mktemp -d)
+            cd -- "$DIR"
+            (set -o xtrace; pwd; nix-build -- "$NIX_CONFIG_PATH")
+            ls -lah
+            OUTPUTS_COUNT=$(printf '%s\n' result* | wc -l)
+            if (( OUTPUTS_COUNT < 5 )); then
+              >&2 printf '[FAIL] Unexpected outputs amount: “%s”\n' "$OUTPUTS_COUNT"
+              exit 1
+            fi
+          )
+
+          # With everything enabled
+          (
+            DIR=$(mktemp -d)
+            cd -- "$DIR"
+            (
+              NIX_BUILD_ARGS=(
+                --arg with-tmuxsh true
+                --arg with-tmux-report-current-pane-cwd true
+                --arg with-tmux true
+              )
+              set -o xtrace
+              pwd
+              nix-build "${NIX_BUILD_ARGS[@]}" -- "$NIX_CONFIG_PATH"
+            )
+            ls -lah
+            OUTPUTS_COUNT=$(printf '%s\n' result* | wc -l)
+            if (( OUTPUTS_COUNT < 5 )); then
+              >&2 printf '[FAIL] Unexpected outputs amount: “%s”\n' "$OUTPUTS_COUNT"
+              exit 1
+            fi
+          )
