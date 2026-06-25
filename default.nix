@@ -155,7 +155,37 @@ let
 
   smokeTest = ''(
     set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
-    >&2 echo 'TODO: Add a smoke test'
+
+    smoke_dir="$(mktemp -d)"
+    socket="$smoke_dir/tmux.sock"
+    export HOME="$smoke_dir/home"
+    export TMPDIR="$smoke_dir/tmp"
+    mkdir -p -- "$HOME" "$TMPDIR"
+
+    # Cleanup background tmux session
+    cleanup() {
+      "$bin" -S "$socket" kill-server &>/dev/null || true
+      rm -rf -- "$smoke_dir"
+    }
+    trap cleanup EXIT
+
+    "$bin" -S "$socket" new-session -d -s smoke 'sleep 30s'
+    "$bin" -S "$socket" has-session -t smoke
+
+    actual="$(
+      "$bin" -S "$socket" display-message -p -t smoke \
+        '#{session_name}:#{pane_current_command}'
+    )"
+
+    expected='smoke:sleep'
+
+    if [[ "$actual" != "$expected" ]]; then
+      >&2 printf 'tmux smoke test failed!\n'
+      >&2 printf 'Expected “%s” while got: “%s”\n' "$expected" "$actual"
+      exit 1
+    fi
+
+    "$bin" -S "$socket" kill-server
   )'';
 
   runtimeDeps =
