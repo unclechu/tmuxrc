@@ -169,15 +169,26 @@ let
     }
     trap cleanup EXIT
 
-    "$bin" -S "$socket" new-session -d -s smoke 'sleep 30s'
+    "$bin" -S "$socket" new-session -d -s smoke "
+      ''${bin@Q} rename-window test-window
+      sleep 30s
+    "
     "$bin" -S "$socket" has-session -t smoke
 
-    actual="$(
-      "$bin" -S "$socket" display-message -p -t smoke \
-        '#{session_name}:#{pane_current_command}'
-    )"
+    expected='smoke:test-window'
 
-    expected='smoke:sleep'
+    for _ in {1..100}; do
+      actual="$(
+        "$bin" -S "$socket" display-message -p -t smoke \
+          '#{session_name}:#{window_name}'
+      )"
+
+      if [[ "$actual" == "$expected" ]]; then
+        break
+      fi
+
+      sleep 0.1s
+    done
 
     if [[ "$actual" != "$expected" ]]; then
       >&2 printf 'tmux smoke test failed!\n'
