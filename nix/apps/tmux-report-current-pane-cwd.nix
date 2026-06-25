@@ -4,11 +4,14 @@
 let sources = import ../sources.nix; in
 { pkgs ? import sources.nixpkgs {}
 , lib ? pkgs.lib
-, writeTextFile ? pkgs.writeTextFile
+, callPackage ? pkgs.callPackage
 
 , bash ? pkgs.bash
 , tmux ? pkgs.tmux
 , xprop ? pkgs.xprop
+
+, executable-dependencies ? callPackage ../utils/executable-dependencies.nix {}
+, mk-generic-script ? callPackage ../utils/mk-generic-script.nix {}
 
 # ↓ Build options ↓
 
@@ -16,36 +19,22 @@ let sources = import ../sources.nix; in
 }:
 
 let
-  executables = {
-    bash = bash;
+  e = (executable-dependencies {
     tmux = tmux;
     xprop = xprop;
-  };
-
-  esc = lib.escapeShellArg;
-  bin = pkg: exe: "${pkg}/bin/${exe}";
-  e = builtins.mapAttrs (n: v: esc (bin v n)) executables;
-  executableFileCheck = x: "[[ -f ${x} || -r ${x} || -x ${x} ]]";
+  }).extend (final: prev: {
+    scriptDependenciesBinPath =
+      lib.flip final.scriptDependenciesBinPathWithIgnore [ ''"$TMUX_EXE"'' ];
+  });
 in
 
-writeTextFile rec {
+mk-generic-script {
   name = "tmux-report-current-pane-cwd";
-  executable = true;
-  destination = "/bin/${name}";
-  checkPhase = ''(
-    set -o nounset
-    ${builtins.concatStringsSep "\n" (map (x: ''
-      if ! ${executableFileCheck x}; then (set -o xtrace && ${executableFileCheck x}); fi
-    '') (builtins.attrValues e))}
-  )'';
-  text = ''
-    #! ${let n = "bash"; in bin executables.${n} n}
-    set -o errexit || exit
-
-    export PATH=${
-      esc (lib.makeBinPath (builtins.attrValues executables))
-    }''${PATH:+:}''${PATH}
-
-    ${builtins.readFile __srcScript}
-  '';
+  src = __srcScript;
+  inherit e;
+  wrapProgramArgs = [
+    # The script allows to customize `TMUX_EXE`, the dependency is not
+    # typical, thus does not propagate automatically. Adding manually.
+    "--prefix" "PATH" ":" (lib.makeBinPath [ e.executables.tmux ])
+  ];
 }

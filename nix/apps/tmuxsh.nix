@@ -4,7 +4,14 @@
 let sources = import ../sources.nix; in
 { pkgs ? import sources.nixpkgs {}
 , lib ? pkgs.lib
+, callPackage ? pkgs.callPackage
+
 , perl ? pkgs.perl
+, perlPackages ? pkgs.perlPackages
+, tmux ? pkgs.tmux
+
+, executable-dependencies ? callPackage ../utils/executable-dependencies.nix {}
+, mk-generic-script ? callPackage ../utils/mk-generic-script.nix {}
 
 # ↓ Build options ↓
 
@@ -16,43 +23,75 @@ let sources = import ../sources.nix; in
 }:
 let
   esc = lib.escapeShellArg;
-  perl-exe = "${perl}/bin/perl";
 
-  script =
-    assert ! isNull tmux-conf-file -> lib.isDerivation tmux-conf-file;
-    let
-      replaceTmuxConfPath =
-        builtins.replaceStrings ["\"$HOME/.tmux.conf\""] ["q<${tmux-conf-file}>"];
-      processScript =
-        if isNull tmux-conf-file then lib.id else replaceTmuxConfPath;
-    in
-    pkgs.writeTextFile rec {
-      name = "tmuxsh";
-      executable = true;
-      destination = "/bin/${name}";
-      text = ''
-        #! ${perl-exe}
-        ${processScript (builtins.readFile __srcScript)}
-      '';
-      checkPhase = ''(
-        set -o nounset
-        set -o xtrace
-        (f=${esc perl-exe}; [[ -f $f && -r $f && -x $f ]])
+  e = (executable-dependencies {
+    perl = perl;
+    tmux = tmux;
+  }).extend (final: prev: {
+    scriptDependencies =
+      final.dependencies
+        "^BEGIN [{] # Guard dependencies$"
+        "^[[:space:]]*need_exe '([^']+)';([[:space:]]*#.*)?$";
+  });
 
-        ${lib.optionalString (! isNull tmux-conf-file) ''
-          (f=${esc "${tmux-conf-file}"}; [[ -f $f && -r $f ]])
-        ''}
-      )'';
-    };
+  perlDependencies = [
+    perlPackages.IPCSystemSimple
+  ];
 
-  scriptWithPerlDeps = pkgs.symlinkJoin {
-    name = "${lib.getName script}-wrapper";
-    nativeBuildInputs = [ pkgs.makeWrapper ];
-    paths = [ script ];
-    postBuild = ''
-      wrapProgram "$out"/bin/${esc (lib.getName script)} \
-        --set PERL5LIB ${esc (with pkgs.perlPackages; makePerlPath [ IPCSystemSimple ])}
+  perlDependenciesBinPath = perlPackages.makePerlPath perlDependencies;
+
+  name = "tmuxsh";
+
+  src = lib.pipe __srcScript [
+    (x:
+      if isNull tmux-conf-file then x else let
+        nextX =
+          builtins.replaceStrings
+            ["\"$HOME/.tmux.conf\""]
+            ["q<${tmux-conf-file}>"]
+            (builtins.readFile x);
+      in
+      assert nextX != x; # Something actually changed
+      pkgs.writeText "${name}-source" nextX
+    )
+  ];
+
+  pkg = mk-generic-script {
+    inherit name src e;
+    buildInputs = [ e.executables.perl ];
+    lintBuildInputs = [ e.executables.perl ];
+    wrapProgramArgs = [ "--set" "PERL5LIB" perlDependenciesBinPath ];
+
+    checkPhase = ''
+      ${lib.optionalString (! isNull tmux-conf-file) ''
+        if ! [[ -f ${esc tmux-conf-file} && -r ${esc tmux-conf-file} ]]; then
+          (set -o xtrace; [[ -f ${esc tmux-conf-file} && -r ${esc tmux-conf-file} ]])
+        fi
+      ''}
+    '';
+
+    cutOffRuntimeDependenciesCheckPhase = ''
+      SED_CMD=(
+        sed -i
+        -e '/^BEGIN { # Guard dependencies/,/^}$/d'
+        -e '/^use IPC::Cmd qw(can_run)/d'
+        -e '/^sub need_exe/d'
+        -- "$src"
+      )
+      "''${SED_CMD[@]}"
+    '';
+
+    lintPhase = ''
+      (
+        export PERL5LIB=${esc perlDependenciesBinPath}
+        (
+          export PATH=${esc (e.scriptDependenciesBinPath src)}:$PATH
+          perl -c -- "$pre_patched_src"
+        )
+        perl -c -- "$src"
+      )
     '';
   };
 in
-  scriptWithPerlDeps
+
+pkg // { inherit perlDependencies; }

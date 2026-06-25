@@ -13,7 +13,8 @@ set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 : "${TMUX_EXE:=tmux}"
 
 # Guard dependencies
->/dev/null type xprop "$TMUX_EXE"
+>/dev/null type xprop
+>/dev/null type "$TMUX_EXE"
 
 TERMINAL_WINDOW_ID=$("$TMUX_EXE" display-message -p '#{WINDOWID}')
 DISPLAY=$("$TMUX_EXE" display-message -p '#{DISPLAY}')

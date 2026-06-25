@@ -100,6 +100,10 @@ nix-shell --run tmux
 
 [Public Domain](LICENSE)
 
+Check headers for individual files. Some of them are copied from different
+projects and have different licensing. Also dependencies have different
+licenses. For example tmux is ISC license.
+
 ## Author
 
 Viacheslav Lotsmanov

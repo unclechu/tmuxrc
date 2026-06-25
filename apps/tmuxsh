@@ -10,6 +10,13 @@ use File::Spec ();
 use File::Basename qw(basename);
 use IPC::System::Simple qw(runx capturex);
 
+use IPC::Cmd qw(can_run);
+sub need_exe { my ($cmd) = @_; can_run($cmd) or die "$cmd: executable dependency not found\n"; }
+
+BEGIN { # Guard dependencies
+	need_exe 'tmux';
+}
+
 use constant APP => basename $0;
 use constant WUT => 'Something unexpectedly went wrong…';
 

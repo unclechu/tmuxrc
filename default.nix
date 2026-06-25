@@ -5,12 +5,16 @@ let sources = import nix/sources.nix; in
 # This module is intended to be called with ‘nixpkgs.callPackage’
 { pkgs ? import sources.nixpkgs {}
 , lib ? pkgs.lib
+, callPackage ? pkgs.callPackage
+
 , tmux ? pkgs.tmux
 , tmuxPlugins ? pkgs.tmuxPlugins
-, dash ? pkgs.dash
 , findutils ? pkgs.findutils
 
 , inNixShell ? false
+
+, executable-dependencies ? callPackage nix/utils/executable-dependencies.nix {}
+, mk-generic-script ? callPackage nix/utils/mk-generic-script.nix {}
 
 # ↓ Build options ↓
 
@@ -28,13 +32,9 @@ let sources = import nix/sources.nix; in
 
 , with-tmux ? inNixShell
 }:
+
 let
   esc = lib.escapeShellArg;
-  dash-exe = "${dash}/bin/dash";
-  tmux-exe = "${tmux}/bin/tmux";
-
-  lines = str: builtins.filter builtins.isString (builtins.split "\n" str);
-  unlines = builtins.concatStringsSep "\n";
 
   # ‘tmuxsh’ for the tmux config itself, without ‘tmux-conf-file’ argument.
   # Otherwise it would be a recursive dependency.
@@ -43,32 +43,35 @@ let
     tmux-conf-file = null;
   };
 
-  tmuxsh-exe = "${tmuxsh}/bin/tmuxsh";
-  replace-tmuxsh = builtins.replaceStrings [ "tmuxsh" ] [ tmuxsh-exe ];
-
   tmux-report-current-pane-cwd =
     pkgs.callPackage nix/apps/tmux-report-current-pane-cwd.nix {};
 
-  tmux-report-current-pane-cwd-exe =
-    "${tmux-report-current-pane-cwd}/bin/tmux-report-current-pane-cwd";
+  executablesMap = {
+    tmux = tmux;
+    tmuxsh = tmuxsh;
+    tmux-report-current-pane-cwd = tmux-report-current-pane-cwd;
+    find = findutils;
+  };
 
+  e = executable-dependencies executablesMap;
+
+  # Type: string → string
+  replace-tmuxsh = builtins.replaceStrings [ "tmuxsh" ] [ e.b.tmuxsh ];
+
+  # Type: string → string
   replace-tmux-report-current-pane-cwd =
     builtins.replaceStrings
       [ "tmux-report-current-pane-cwd" ]
-      [ tmux-report-current-pane-cwd-exe ];
+      [ e.b.tmux-report-current-pane-cwd ];
 
+  # Type: {
+  #   pre = [string]; # Config part before plugins section
+  #   plugins = [string]; # A list of extracted plugin names
+  #   post = [string]; # Config part after plugins section
+  # }
   pluginsSplit =
     let
       initial = { place = "pre"; pre = []; plugins = []; post = []; };
-
-      result =
-        builtins.foldl' reducer initial (lines (
-          lib.pipe __srcConfigFile [
-            builtins.readFile
-            replace-tmuxsh
-            replace-tmux-report-current-pane-cwd
-          ]
-        ));
 
       reducer = acc: line: acc // (
         if acc.place == "pre"
@@ -83,7 +86,7 @@ let
              else let match = builtins.match "set -g @plugin '.+/(.+)'" line;
                   in  if isNull match
                       then {}
-                      else { plugins = [ (builtins.elemAt match 0) ]; }
+                      else { plugins = acc.plugins ++ [ (builtins.elemAt match 0) ]; }
         else
 
         if acc.place == "post"
@@ -91,92 +94,104 @@ let
         else throw "Unexpected ‘place’ during parsing: ‘${acc.place}’"
       );
     in
-      assert result.place == "post";
-      lib.filterAttrs (n: v: n != "place") result;
+      lib.pipe __srcConfigFile [
+        builtins.readFile
+        replace-tmuxsh
+        replace-tmux-report-current-pane-cwd
+        # Keep the context
+        (x: { c = builtins.getContext x; v = x; })
+        (x: x // { v = builtins.split "\n" x.v; })
+        (x: x // { v = builtins.filter builtins.isString x.v; })
+        (x: x // { v = builtins.foldl' reducer initial x.v; })
+        (x: assert x.v.place == "post"; x)
+        (x: {
+          # Restore the context that is lost after `builtins.split`
+          pre = map (lib.flip builtins.appendContext x.c) x.v.pre;
+          post = map (lib.flip builtins.appendContext x.c) x.v.post;
+          inherit (x.v) plugins;
+        })
+      ];
 
-  pluginsLoadingCommandsFile =
-    let
-      find = "${findutils}/bin/find";
-
-      plugins = builtins.concatStringsSep "\n" (
-        builtins.map (x: tmuxPlugins.${x}) pluginsSplit.plugins
-      );
-    in
-      pkgs.runCommand "tmux-plugin-imports" {
-        inherit plugins;
-        passAsFile = [ "plugins" ];
-      } ''
-        set -o errexit || exit
-        set -o nounset
-        set -o pipefail
-        readarray -t PLUGINS < "$pluginsPath"
-
-        for plugin in "''${PLUGINS[@]}"; do
-          if ! [[ -d $plugin ]]; then
-            >&2 printf 'Plugin path "%s" is not a directory!\n' "$plugin"
-            exit 1
-          fi
-
-          ${esc find} "$plugin" -name '*.tmux' | while read -r file; do
-            printf "run '%s'\n" "$file" >> "$out"
-          done
-        done
-      '';
+  # Type: [derivation]
+  plugins = builtins.map (x: tmuxPlugins.${x}) pluginsSplit.plugins;
 
   config = ''
-    ${unlines pluginsSplit.pre}
-
+    ${builtins.concatStringsSep "\n" pluginsSplit.pre}
     # Plugins loading {{{
-    ${builtins.readFile pluginsLoadingCommandsFile}
+    ${builtins.concatStringsSep "\n" (map (plugin: "run '${plugin.rtp}'") plugins)}
     # Plugins loading }}}
-
-    ${unlines pluginsSplit.post}
+    ${builtins.concatStringsSep "\n" pluginsSplit.post}
   '';
 
   configFile = pkgs.writeTextFile {
     name = "tmux.conf";
     text = config;
     checkPhase = ''(
-      set -o nounset
-      set -o xtrace
-      (f=${esc tmuxsh-exe}; [[ -f $f && -r $f && -x $f ]])
+      set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
+
+      ${e.checkPhase}
+
+      # Checking that plugins are healthy
+      (${
+        builtins.concatStringsSep "\n" (map (plugin: ''
+          if ! [[ -d ${esc "${plugin}"} ]]; then
+            >&2 printf 'Plugin path "%s" is not a directory!\n' ${esc "${plugin}"}
+            exit 1
+          elif ! [[ -f ${esc "${plugin.rtp}"} ]]; then
+            >&2 printf 'Plugin’s “rtp” value “%s” is not a file!\n' ${esc "${plugin.rtp}"}
+            exit 1
+          fi
+        '') plugins)
+      })
     )'';
   };
 
-  # ‘tmuxsh’ that is provided for the user for manual calls
-  exported-tmuxsh = pkgs.callPackage nix/apps/tmuxsh.nix {
-    tmux-conf-file = configFile;
-  };
+  eFinal = executable-dependencies (executablesMap // {
+    # ‘tmuxsh’ that is provided for the user for manual calls
+    tmuxsh = pkgs.callPackage nix/apps/tmuxsh.nix {
+      tmux-conf-file = configFile;
+    };
+  });
 
-  wenzels-tmux = pkgs.writeTextFile rec {
+  smokeTest = ''(
+    set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
+    >&2 echo 'TODO: Add a smoke test'
+  )'';
+
+  runtimeDeps =
+    lib.optional with-tmuxsh eFinal.executables.tmuxsh
+    ++
+    lib.optional
+      with-tmux-report-current-pane-cwd
+      eFinal.executables.tmux-report-current-pane-cwd
+    ;
+
+  wenzels-tmux = pkgs.symlinkJoin rec {
     name = "wenzels-tmux";
-    executable = true;
-    destination = "/bin/tmux";
-    text = ''
-      #! ${dash-exe}
-      ${
-        lib.optionalString
-          with-tmuxsh
-          "PATH=${esc (lib.makeBinPath [ exported-tmuxsh ])}\${PATH:+:}\${PATH:-} "
-      }${
-        lib.optionalString
-          with-tmux-report-current-pane-cwd
-          "PATH=${esc (lib.makeBinPath [ tmux-report-current-pane-cwd ])}\${PATH:+:}\${PATH:-} "
-      }exec ${esc tmux-exe} -f ${esc configFile} "$@"
+    meta.mainProgram = baseNameOf eFinal.b.tmux;
+    nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
+    paths = [ e.executables.tmux ];
+
+    postBuild = ''
+      ${eFinal.checkPhase}
+      if ! [[ -f ${esc configFile} && -r ${esc configFile} ]]; then
+        (set -o xtrace; [[ -f ${esc configFile} && -r ${esc configFile} ]])
+      fi
+
+      bin="$out"/bin/${esc meta.mainProgram}
+
+      CMD=(
+        wrapProgram "$bin"
+        ${if builtins.length runtimeDeps <= 0 then "" else ''
+          --prefix PATH : ${esc (lib.makeBinPath runtimeDeps)}
+        ''}
+        --add-flags ${esc "-f ${configFile}"}
+      )
+      "''${CMD[@]}"
+
+      >/dev/null type -- "$bin"
+      ${smokeTest}
     '';
-    checkPhase = ''(
-      set -o nounset
-      set -o xtrace
-      (f=${esc dash-exe}; [[ -f $f && -r $f && -x $f ]])
-      (f=${esc tmux-exe}; [[ -f $f && -r $f && -x $f ]])
-      ${lib.optionalString with-tmuxsh ''
-        (f=${esc "${exported-tmuxsh}/bin/tmuxsh"}; [[ -f $f && -r $f && -x $f ]])
-      ''}
-      ${lib.optionalString with-tmux-report-current-pane-cwd ''
-        (f=${esc "${tmux-report-current-pane-cwd}/bin/tmux-report-current-pane-cwd"}; [[ -f $f && -r $f && -x $f ]])
-      ''}
-      (f=${esc configFile}; [[ -f $f && -r $f ]])
-    )'';
   };
 
   shell = pkgs.stdenv.mkDerivation rec {
@@ -185,19 +200,21 @@ let
 
     buildInputs =
       lib.optional with-tmux wenzels-tmux
-      ++ lib.optional with-tmuxsh exported-tmuxsh
-      ++ lib.optional with-tmuxsh tmux-report-current-pane-cwd;
+      ++ lib.optional with-tmuxsh eFinal.executables.tmuxsh
+      ++ lib.optional with-tmuxsh eFinal.executables.tmux-report-current-pane-cwd;
 
     installPhase = ''(
       set -o nounset
       touch -- "$out"
-      printf '%s\n' ${pkgs.lib.escapeShellArgs (map (x: "${x}") buildInputs)} >> "$out"
+      printf '%s\n' ${lib.escapeShellArgs (map (x: "${x}") buildInputs)} >> "$out"
     )'';
   };
 in
+
 (if inNixShell then shell else {}) // {
-  inherit config configFile pluginsLoadingCommandsFile shell;
+  inherit config configFile shell;
   tmux = wenzels-tmux;
-  tmuxsh = exported-tmuxsh;
-  inherit tmux-report-current-pane-cwd;
+  tmuxsh = eFinal.executables.tmuxsh;
+  tmux-report-current-pane-cwd =
+    eFinal.executables.tmux-report-current-pane-cwd;
 }
